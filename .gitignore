@@ -1,0 +1,13 @@
+# data & caches
+pipeline/data/
+pipeline/osm/
+pipeline/out/*.parquet
+pipeline/out/*.duckdb
+pipeline/.venv/
+.venv/
+__pycache__/
+*.pyc
+# web
+web/node_modules/
+web/dist/
+.DS_Store
