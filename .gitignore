@@ -11,3 +11,6 @@ __pycache__/
 web/node_modules/
 web/dist/
 .DS_Store
+# stress fixture from make_fixture.py --out ../web/public/fixture-dense
+web/public/fixture-dense/
+pipeline/out/routes_cache.duckdb*
