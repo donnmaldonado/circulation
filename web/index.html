@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Circulation · one day of Citi Bike</title>
+    <meta name="description" content="Every Citi Bike trip of one New York weekday, replayed as light." />
+    <meta name="theme-color" content="#050608" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23050608'/%3E%3Cpath d='M3 11 L7 7 L9 9 L13 4' stroke='%2340D8FF' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <!-- Poster first: it is the first paint, before any script runs. -->
+    <link rel="preload" as="image" href="./poster.webp" type="image/webp" fetchpriority="high" />
+    <!-- Basemap critical path: style -> tiles.json -> tiles on 4 shards. Warm them all. -->
+    <link rel="preload" as="fetch" href="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json" crossorigin />
+    <link rel="preconnect" href="https://tiles.basemaps.cartocdn.com" crossorigin />
+    <link rel="preconnect" href="https://tiles-a.basemaps.cartocdn.com" crossorigin />
+    <link rel="preconnect" href="https://tiles-b.basemaps.cartocdn.com" crossorigin />
+    <link rel="preconnect" href="https://tiles-c.basemaps.cartocdn.com" crossorigin />
+    <link rel="preconnect" href="https://tiles-d.basemaps.cartocdn.com" crossorigin />
+    <style>
+      /* Critical CSS: dark page + full-bleed poster on the very first frame. */
+      html, body { margin: 0; height: 100%; background: #050608; color: #d9dde6; overflow: hidden; }
+      #map { position: fixed; inset: 0; }
+      #poster { position: fixed; inset: 0; z-index: 5; pointer-events: none; background: #050608;
+        transition: opacity 0.7s ease; }
+      #poster > div { position: absolute; inset: 0; background-position: center; background-size: cover;
+        background-repeat: no-repeat; }
+      #poster .lqip { background-image: %POSTER_LQIP%; filter: blur(14px); transform: scale(1.04); }
+      #poster .full { background-image: url(./poster.webp); }
+      .live #poster { opacity: 0; }
+      .poster-mode #poster { transition: none; }
+      .brand { position: fixed; top: 20px; left: 24px; z-index: 10; pointer-events: none;
+        font: 400 13px/1.35 ui-sans-serif, -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif;
+        text-shadow: 0 1px 8px #000; }
+      .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: #eef1f6; }
+      .brand p { margin: 4px 0 0; color: #8b93a3; letter-spacing: 0.02em; }
+      .fixture-badge { display: none; margin-left: 8px; padding: 1px 6px; border: 1px solid #3a3f4a; border-radius: 4px;
+        font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9aa3b5; }
+      .is-fixture .fixture-badge { display: inline-block; }
+      .poster-mode .brand { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="map" aria-label="Map of Citi Bike trips"></div>
+      <div id="poster" aria-hidden="true"><div class="lqip"></div><div class="full"></div></div>
+      <header class="brand">
+        <h1>Circulation</h1>
+        <p>One weekday of Citi Bike, every trip<span class="fixture-badge">synthetic fixture</span></p>
+      </header>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
