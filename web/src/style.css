@@ -140,13 +140,346 @@
   .legend-note {
     display: none;
   }
-  /* keep attribution clear of the thumb-reach controls */
-  .maplibregl-ctrl-bottom-right {
-    bottom: calc(64px + env(safe-area-inset-bottom));
-  }
 }
 @media (max-width: 480px) {
   .legend {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- scrubber */
+.hud-slot {
+  display: flex;
+}
+.scrubber {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 12px 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+.scrubber:focus-visible {
+  box-shadow: 0 0 0 2px rgba(64, 216, 255, 0.7);
+}
+.scrub-track {
+  position: relative;
+  height: 34px;
+}
+.scrub-track canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.scrub-head {
+  position: absolute;
+  top: -3px;
+  bottom: -2px;
+  left: -1px;
+  width: 2px;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.7);
+  will-change: transform;
+}
+.scrub-head::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+.scrubber.dragging .scrub-head::after {
+  transform: scale(1.4);
+}
+.scrub-hover {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.scrub-hover span {
+  display: block;
+  width: max-content;
+  margin-bottom: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(10, 12, 16, 0.92);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font: 500 11.5px/1.2 var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.scrubber.hovering .scrub-hover {
+  opacity: 1;
+}
+.scrub-ticks {
+  position: relative;
+  height: 13px;
+  color: var(--muted);
+  font: 500 10px/13px var(--mono);
+}
+.scrub-ticks span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+.scrub-ticks span:first-child {
+  transform: none;
+}
+.scrub-ticks span::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  width: 1px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.scrub-ticks span:first-child::before {
+  left: 0;
+}
+
+/* ---------------------------------------------------------------- tide legend */
+.tide-key {
+  gap: 6px;
+}
+.tide-key i {
+  width: 34px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tide-sink), var(--tide-neutral), var(--tide-source));
+  box-shadow: none;
+}
+.tide-key em {
+  font-style: normal;
+}
+
+/* ---------------------------------------------------------------- station panel */
+.station-panel {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 12;
+  width: 300px;
+  max-height: calc(100vh - var(--hud-h, 140px) - 40px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 14px 16px 12px;
+  background: rgba(10, 12, 16, 0.84);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--fg);
+  font: 400 13px/1.35 var(--font);
+}
+.station-panel[hidden] {
+  display: none;
+}
+.sp-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sp-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+}
+.sp-close svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.sp-kicker {
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sp-name {
+  margin: 3px 28px 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.sp-flow {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-flow em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.8;
+}
+.flow {
+  color: var(--fg);
+  font-weight: 600;
+}
+.flow.sink {
+  color: var(--tide-sink);
+}
+.flow.source {
+  color: var(--tide-source);
+}
+.sp-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 10px 0 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-stats b {
+  color: var(--fg);
+  font: 600 15px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.sp-day {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.station-panel h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sp-dests {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sp-dests li {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.sp-dests li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--w);
+  border-radius: 6px;
+  background: rgba(255, 244, 230, 0.07);
+  pointer-events: none;
+}
+.sp-dests li:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.sp-dests li.sp-empty {
+  color: var(--muted);
+  cursor: default;
+}
+.sp-dn {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-dc {
+  position: relative;
+  font: 500 12px/1.35 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.sp-note {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.station-tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 13;
+  pointer-events: none;
+  will-change: transform;
+  font: 400 12px/1.35 var(--font);
+  color: var(--fg);
+}
+.station-tip[hidden] {
+  display: none;
+}
+.st-box {
+  width: max-content;
+  max-width: 280px;
+  margin: 14px 0 0 14px;
+  padding: 6px 9px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.92);
+}
+.st-box b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.st-flow {
+  color: var(--muted);
+}
+.st-flow em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+@media (max-width: 640px) {
+  /* station panel becomes a bottom sheet just above the HUD */
+  .station-panel {
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--hud-h, 140px) + 8px);
+    width: auto;
+    max-height: 40vh;
+    padding: 12px 14px 10px;
+  }
+  .station-tip {
     display: none;
   }
 }
@@ -168,6 +501,12 @@
 .poster-mode .maplibregl-ctrl-bottom-right,
 .poster-mode .maplibregl-ctrl-bottom-left {
   display: none;
+}
+
+/* keep the basemap attribution visible above the full-width scrubber
+   (#map: must out-rank maplibre-gl.css, which loads after this file) */
+#map .maplibregl-ctrl-bottom-right {
+  bottom: calc(var(--hud-h, 0px) + 2px);
 }
 
 .maplibregl-ctrl-attrib.maplibregl-compact {
