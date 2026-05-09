@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="intro-open">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -10,6 +10,8 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23050608'/%3E%3Cpath d='M3 11 L7 7 L9 9 L13 4' stroke='%2340D8FF' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
     <!-- Poster first: it is the first paint, before any script runs. -->
     <link rel="preload" as="image" href="./poster.webp" type="image/webp" fetchpriority="high" />
+    <!-- Data on the critical path (manifest + the hours on screen at the opening moment), fetched in parallel with the JS. -->
+    %DATA_PRELOADS%
     <!-- Basemap critical path: style -> tiles.json -> tiles on 4 shards. Warm them all. -->
     <link rel="preload" as="fetch" href="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json" crossorigin />
     <link rel="preconnect" href="https://tiles.basemaps.cartocdn.com" crossorigin />
@@ -27,6 +29,8 @@
         background-repeat: no-repeat; }
       #poster .lqip { background-image: %POSTER_LQIP%; filter: blur(14px); transform: scale(1.04); }
       #poster .full { background-image: url(./poster.webp); }
+      /* Portrait phones: frame Midtown (keep in sync with PORTRAIT in src/config.ts). */
+      @media (max-aspect-ratio: 4/5) { #poster > div { background-position: 40% 50%; } }
       .live #poster { opacity: 0; }
       .poster-mode #poster { transition: none; }
       .brand { position: fixed; top: 20px; left: 24px; z-index: 10; pointer-events: none;
@@ -38,12 +42,31 @@
         font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9aa3b5; }
       .is-fixture .fixture-badge { display: inline-block; }
       .poster-mode .brand { display: none; }
+      .intro-open .brand { opacity: 0; }
+      .poster-mode #intro { display: none; }
     </style>
   </head>
   <body>
     <div id="app">
       <div id="map" aria-label="Map of Citi Bike trips"></div>
       <div id="poster" aria-hidden="true"><div class="lqip"></div><div class="full"></div></div>
+      <section id="intro" class="intro" aria-label="Introduction">
+        <div class="intro-scrim"></div>
+        <div class="intro-body">
+          <p class="intro-kicker"><span data-intro-date>%INTRO_DATE%</span> · <span data-intro-trips>%INTRO_TRIPS%</span> Citi Bike trips</p>
+          <p class="intro-title" role="heading" aria-level="2">Circulation</p>
+          <p class="intro-lede">Every bike-share trip of one New York weekday, replayed as light along estimated street routes. The dots are stations: rose while they fill with bikes, violet while they empty.</p>
+          <p class="intro-headline" data-intro-headline>%INTRO_HEADLINE%</p>
+          <p class="intro-sub" data-intro-sub>%INTRO_SUB%</p>
+          <p class="intro-key" aria-label="Colour key">
+            <span><i class="ln eb"></i>e-bike</span><span><i class="ln cl"></i>classic</span><span class="dim">casual riders dimmer</span><span><i class="dot sink"></i>filling</span><span><i class="dot source"></i>emptying</span>
+          </p>
+          <div class="intro-actions">
+            <button type="button" class="intro-go"><span class="fine">Scroll or click</span><span class="coarse">Tap</span> to explore <span class="chev" aria-hidden="true">↓</span></button>
+            <button type="button" class="intro-ch" data-intro-chapter>Did congestion pricing change this? →</button>
+          </div>
+        </div>
+      </section>
       <header class="brand">
         <h1>Circulation</h1>
         <p>One weekday of Citi Bike, every trip<span class="fixture-badge">synthetic fixture</span></p>

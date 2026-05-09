@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "poster": "node scripts/poster.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "shots": "node scripts/shots.mjs",
+    "fps-day": "node scripts/fps-day.mjs",
+    "record": "node scripts/record.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.4.0",

@@ -78,7 +78,7 @@ export function mountTide(o: TideOptions): TideHandle {
     const key = document.createElement('span');
     key.className = 'tide-key';
     key.title = 'Station dots: net bikes arriving (warm) vs leaving (cool) this 15 minutes';
-    key.innerHTML = '<em>arriving</em><i></i><em>leaving</em>';
+    key.innerHTML = '<em>filling</em><i></i><em>emptying</em>';
     o.legend.appendChild(key);
   }
 

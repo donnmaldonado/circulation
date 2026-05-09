@@ -54,6 +54,13 @@ try {
         .map((m) => [m.name.slice(5), Math.round(m.startTime)]),
     ),
   );
+  // First paint (the inline poster placeholder + intro text) and when the full poster image arrived.
+  report.paint = await page.evaluate(() => {
+    const out = Object.fromEntries(performance.getEntriesByType('paint').map((e) => [e.name, Math.round(e.startTime)]));
+    const poster = performance.getEntriesByType('resource').find((r) => r.name.endsWith('poster.webp'));
+    if (poster) out['poster.webp loaded'] = Math.round(poster.responseEnd);
+    return out;
+  });
   report.renderer = await glRenderer(page);
 
   await page.waitForTimeout(1000); // let the cross-fade finish

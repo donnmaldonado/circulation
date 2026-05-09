@@ -4,7 +4,7 @@
 // limited concurrency. A seek re-prioritises whatever hasn't started yet.
 
 import { FETCH_CONCURRENCY } from '../config';
-import { decodeChunk, pad } from './decode';
+import { decodeChunk, pad, type DecodeOptions } from './decode';
 import type { Manifest, Station, TripChunk } from './types';
 
 export interface DataSource {
@@ -82,6 +82,7 @@ export class ChunkStore {
 
   constructor(
     readonly src: DataSource,
+    private readonly decodeOpts: DecodeOptions = {},
     private readonly concurrency = FETCH_CONCURRENCY,
   ) {}
 
@@ -137,7 +138,7 @@ export class ChunkStore {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
       const t0 = performance.now();
-      const chunk = decodeChunk(buf, hour, this.src.manifest);
+      const chunk = decodeChunk(buf, hour, this.src.manifest, this.decodeOpts);
       const dt = performance.now() - t0;
       this.chunks[hour] = chunk;
       this.version++;

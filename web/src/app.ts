@@ -9,6 +9,8 @@ import type { Clock } from './playback/clock';
 import type { TideHandle } from './stations/mount';
 import type { ControlsHandle } from './ui/controls';
 import type { FpsStats } from './ui/fps';
+import type { IntroHandle } from './ui/intro';
+import type { PanelsHandle } from './ui/panels';
 import type { ScrubberHandle } from './ui/scrubber';
 
 export interface App {
@@ -25,5 +27,11 @@ export interface App {
   /** Tide dots, station↔trip index and station selection; null until stations.json loads. */
   tide: TideHandle | null;
   params: URLSearchParams;
+  /** Intro overlay; null in ?poster / ?nointro mode. */
+  intro: IntroHandle | null;
+  /** Chapter / About panels; null in ?poster mode. */
+  panels: PanelsHandle | null;
+  /** True when only half the trails are drawn (phones). */
+  thin: boolean;
   fps?: FpsStats;
 }

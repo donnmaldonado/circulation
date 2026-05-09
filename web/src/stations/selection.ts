@@ -39,6 +39,7 @@ export class StationSelection {
   private readonly tip: HTMLElement;
   private lastBin = -1;
   private hovered = -1;
+  private readonly changeListeners = new Set<(station: number) => void>();
 
   constructor(
     private readonly index: StationIndex,
@@ -75,6 +76,12 @@ export class StationSelection {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.sel) this.clear();
     });
+  }
+
+  /** Called with the station index on select, and -1 on clear. Returns an unsubscribe function. */
+  onChange(fn: (station: number) => void): () => void {
+    this.changeListeners.add(fn);
+    return () => this.changeListeners.delete(fn);
   }
 
   get station(): number {
@@ -119,6 +126,7 @@ export class StationSelection {
     this.lastSelectMs = performance.now() - t0;
     this.renderPanel();
     this.requestRender();
+    this.changeListeners.forEach((fn) => fn(s));
   }
 
   /** Time the last select() took (ms), for verification. */
@@ -129,6 +137,7 @@ export class StationSelection {
     this.sel = null;
     this.panel.hidden = true;
     this.requestRender();
+    this.changeListeners.forEach((fn) => fn(-1));
   }
 
   /** Highlighted outbound trips: full-day paths (faint) + the ones riding now (bright). Draw above base trips. */

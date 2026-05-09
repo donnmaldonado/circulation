@@ -24,7 +24,7 @@ const BIN_S = 900;
 /** Recompute dot colours/sizes when sim time moved this much (s) — well below one bin. */
 const RECOMPUTE_S = 8;
 const R0_M = 12;
-const R1_M = 55;
+const R1_M = 46;
 /** Busy-station factor over the citywide mean at the peak hour (see aRef). */
 const HUB_FACTOR = 4;
 const FADE_IN_MS = 700;
@@ -110,7 +110,7 @@ export class TideModel {
         data: data as never,
         radiusUnits: 'meters',
         radiusMinPixels: 1.8,
-        radiusMaxPixels: 8,
+        radiusMaxPixels: 7,
         stroked: true,
         lineWidthUnits: 'pixels',
         getLineWidth: 0.8,

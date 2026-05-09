@@ -1,13 +1,15 @@
 import './style.css';
-import { DEFAULT_SPEED, START_TIME } from './config';
+import { DEFAULT_SPEED, REVEAL_DEADLINE_MS, START_TIME, THIN_MEDIA } from './config';
 import { ChunkStore, loadStations, resolveDataSource } from './data/loader';
-import { buildTripsLayers } from './layers/trips';
+import { buildTripsLayers, setVertexCulling } from './layers/trips';
 import { createMap } from './map/map';
 import { Scene } from './map/scene';
 import { Clock, parseClock } from './playback/clock';
 import { mountTide } from './stations/mount';
 import { mountControls } from './ui/controls';
 import { startFpsMeter } from './ui/fps';
+import { mountIntro } from './ui/intro';
+import { mountPanels } from './ui/panels';
 import { revealLive } from './ui/poster';
 import { mountScrubber } from './ui/scrubber';
 import type { App } from './app';
@@ -15,6 +17,10 @@ import type { App } from './app';
 const params = new URLSearchParams(location.search);
 const POSTER_MODE = params.has('poster'); // UI hidden, paused at START_TIME, for scripts/poster.mjs
 const DEBUG = params.has('debug');
+/** Phones draw half the trails (decode.ts) and skip the glow pass. `?density=full|half` overrides. */
+const THIN = params.has('density') ? params.get('density') === 'half' : !POSTER_MODE && matchMedia(THIN_MEDIA).matches;
+const HALO = !THIN && params.get('halo') !== '0';
+if (params.has('nocull')) setVertexCulling(false);
 
 const mark = (name: string) => performance.mark(`circ:${name}`);
 
@@ -26,6 +32,12 @@ async function boot(): Promise<App> {
   const { map, overlay, basemapReady } = createMap(mapEl);
   const source = await resolveDataSource(params);
   mark('manifest');
+  // The intro is static markup (first paint); fill it from the manifest and arm dismissal.
+  const intro = POSTER_MODE || params.has('nointro') ? null : mountIntro(source.manifest, { onChapter: () => panels?.open('chapter') });
+  if (!intro) {
+    document.getElementById('intro')?.remove();
+    document.documentElement.classList.remove('intro-open');
+  }
   const stationsReady = loadStations(source).catch((err) => {
     console.error('[circulation] stations.json failed; tide layer off', err);
     return null;
@@ -34,12 +46,12 @@ async function boot(): Promise<App> {
   const startTime = parseClock(params.get('t')) ?? START_TIME;
   const speed = Number(params.get('speed')) || DEFAULT_SPEED;
   const clock = new Clock(startTime, speed);
-  const store = new ChunkStore(source);
+  const store = new ChunkStore(source, { thin: THIN });
   store.prioritize(clock.hour);
 
   const scene = new Scene(overlay, () => clock.time);
   // Base trails dim while a station is selected (app.tide.selection).
-  scene.addProvider('trips', (t) => buildTripsLayers(store, t, { opacity: app.tide?.selection?.baseOpacity ?? 1 }), 0);
+  scene.addProvider('trips', (t) => buildTripsLayers(store, t, { opacity: app.tide?.selection?.baseOpacity ?? 1, halo: HALO }), 0);
 
   // Keep the fetch queue in playback order after seeks; redraw when data lands.
   clock.subscribe((state, ev) => {
@@ -51,6 +63,9 @@ async function boot(): Promise<App> {
   if (source.isFixture) document.documentElement.classList.add('is-fixture');
   const hud = POSTER_MODE ? null : mountControls(root, clock);
   const scrubber = hud ? mountScrubber(hud.slot, clock, source.manifest.histogram) : null;
+  const panels = hud
+    ? mountPanels({ root, navSlot: hud.navSlot, base: source.base, scene, manifest: source.manifest, isFixture: source.isFixture })
+    : null;
   if (hud) {
     // --hud-h: height of the bottom HUD, so panels and the attribution can sit above it.
     const setHudH = () => document.documentElement.style.setProperty('--hud-h', `${hud.root.offsetHeight}px`);
@@ -58,7 +73,7 @@ async function boot(): Promise<App> {
     setHudH();
   }
 
-  const app: App = { clock, store, scene, map, overlay, source, hud, scrubber, tide: null, params };
+  const app: App = { clock, store, scene, map, overlay, source, hud, scrubber, tide: null, params, intro, panels, thin: THIN };
   (window as unknown as { circ: App }).circ = app;
 
   // Tide dots + station selection, once stations.json is in (fades in; never blocks the reveal).
@@ -76,6 +91,7 @@ async function boot(): Promise<App> {
       interactive: !POSTER_MODE,
       under: params.get('tide') === 'under',
     });
+    if (app.tide.selection) panels?.attachSelection(app.tide.selection);
     mark('tide');
   });
 
@@ -89,7 +105,9 @@ async function boot(): Promise<App> {
   const needed = POSTER_MODE ? [h, (h + 23) % 24, (h + 22) % 24, (h + 21) % 24] : [h, (h + 23) % 24];
   await store.whenLoaded(needed);
   mark('first-chunk');
-  await Promise.race([basemapReady, delay(POSTER_MODE ? 15000 : 1500)]);
+  // Wait for the basemap, but never past REVEAL_DEADLINE_MS after navigation: late tiles
+  // fill in under the poster's cross-fade; a late start would miss the reviewer's glance.
+  await Promise.race([basemapReady, delay(POSTER_MODE ? 15000 : Math.max(0, REVEAL_DEADLINE_MS - performance.now()))]);
   mark('basemap');
   scene.render();
   await nextDeckFrame(scene);

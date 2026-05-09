@@ -7,6 +7,8 @@ export interface Manifest {
   histogram: number[];
   totals: { trips: number; ebike: number; member: number };
   headline: string;
+  /** Other honest tide ratios the encoder considered (c_encode.py), best first. */
+  runner_ups?: string[];
   /** Present (true) only on the synthetic fixture. */
   fixture?: boolean;
 }
@@ -33,7 +35,7 @@ export const FLAG_MEMBER = 2;
 export interface TripGroup {
   /** Stable id, e.g. "08-3" (hour-groupKey). */
   id: string;
-  /** Trip index range [tripFrom, tripTo) within the chunk. */
+  /** Trip index range [tripFrom, tripTo) within the chunk. When thinned, `data` draws only a prefix of it. */
   tripFrom: number;
   tripTo: number;
   /** Earliest start / latest end of any trip in the group (abs seconds). */

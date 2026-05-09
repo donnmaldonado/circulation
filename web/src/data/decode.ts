@@ -19,7 +19,17 @@ const DURATION_CLASSES = [
   { maxDur: Infinity, window: 60 * 60 },
 ];
 
-export function decodeChunk(buffer: ArrayBuffer, hour: number, manifest: Manifest): TripChunk {
+export interface DecodeOptions {
+  /**
+   * Render only half the trails (phones). Every trip is still decoded and kept
+   * in the chunk — the station index, tide sizes and station selection see all
+   * of them — but each render group draws only the trips with an even index in
+   * the file. Deterministic, and unbiased: file order is by start time.
+   */
+  thin?: boolean;
+}
+
+export function decodeChunk(buffer: ArrayBuffer, hour: number, manifest: Manifest, opts: DecodeOptions = {}): TripChunk {
   const view = new DataView(buffer);
   const tripCount = view.getUint32(0, true);
   const vertexCount = view.getUint32(4, true);
@@ -38,6 +48,9 @@ export function decodeChunk(buffer: ArrayBuffer, hour: number, manifest: Manifes
 
   const base = hour * 3600;
   // Order trips by group key, then start time, so each group is a contiguous range.
+  // When thinning, the kept (even-index) trips sort first within their group, so
+  // the drawn half is a contiguous prefix: no copies, just shorter views.
+  const thin = !!opts.thin;
   const order = new Uint32Array(tripCount);
   const key = new Uint16Array(tripCount);
   const startRel = new Uint16Array(tripCount);
@@ -50,7 +63,7 @@ export function decodeChunk(buffer: ArrayBuffer, hour: number, manifest: Manifes
     key[i] = c * 100 + Math.floor(t0 / DURATION_CLASSES[c].window);
     startRel[i] = t0;
   }
-  order.sort((a, b) => key[a] - key[b] || startRel[a] - startRel[b]);
+  order.sort((a, b) => key[a] - key[b] || (thin ? (a & 1) - (b & 1) : 0) || startRel[a] - startRel[b]);
 
   const [minLng, minLat, maxLng, maxLat] = manifest.bbox;
   const sx = (maxLng - minLng) / 65535;
@@ -103,27 +116,39 @@ export function decodeChunk(buffer: ArrayBuffer, hour: number, manifest: Manifes
     bytes: buffer.byteLength,
   };
   const sortedKeys = new Uint16Array(tripCount);
-  for (let j = 0; j < tripCount; j++) sortedKeys[j] = key[order[j]];
-  chunk.groups = makeGroups(chunk, sortedKeys);
+  const skipped = new Uint8Array(tripCount);
+  for (let j = 0; j < tripCount; j++) {
+    sortedKeys[j] = key[order[j]];
+    skipped[j] = thin ? order[j] & 1 : 0;
+  }
+  chunk.groups = makeGroups(chunk, sortedKeys, skipped);
   return chunk;
 }
 
-function makeGroups(chunk: TripChunk, keys: Uint16Array): TripGroup[] {
+function makeGroups(chunk: TripChunk, keys: Uint16Array, skipped: Uint8Array): TripGroup[] {
   const groups: TripGroup[] = [];
   let from = 0;
   while (from < chunk.tripCount) {
     let to = from;
+    let drawTo = from; // end of the drawn prefix (== to unless thinning)
     let tMin = Infinity;
     let tMax = -Infinity;
     while (to < chunk.tripCount && keys[to] === keys[from]) {
-      tMin = Math.min(tMin, chunk.tripStart[to]);
-      tMax = Math.max(tMax, chunk.tripEnd[to]);
+      if (!skipped[to]) {
+        drawTo = to + 1;
+        tMin = Math.min(tMin, chunk.tripStart[to]);
+        tMax = Math.max(tMax, chunk.tripEnd[to]);
+      }
       to++;
     }
+    if (drawTo === from) {
+      from = to;
+      continue; // nothing drawn in this group
+    }
     const v0 = chunk.startIndices[from];
-    const v1 = chunk.startIndices[to];
-    const startIndices = new Uint32Array(to - from + 1);
-    for (let i = from; i <= to; i++) startIndices[i - from] = chunk.startIndices[i] - v0;
+    const v1 = chunk.startIndices[drawTo];
+    const startIndices = new Uint32Array(drawTo - from + 1);
+    for (let i = from; i <= drawTo; i++) startIndices[i - from] = chunk.startIndices[i] - v0;
     groups.push({
       id: `${pad(chunk.hour)}-${keys[from]}`,
       tripFrom: from,
@@ -131,7 +156,7 @@ function makeGroups(chunk: TripChunk, keys: Uint16Array): TripGroup[] {
       tMin,
       tMax,
       data: {
-        length: to - from,
+        length: drawTo - from,
         startIndices,
         attributes: {
           getPath: { value: chunk.positions.subarray(v0 * 2, v1 * 2), size: 2 },

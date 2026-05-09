@@ -30,6 +30,25 @@ export const ALPHA = { member: 255, casual: 110 };
 export const TRAIL_WIDTH_PX = 1.6;
 
 /**
+ * Peak dimming. Under additive blending the busy avenues saturate to white at
+ * rush hour, so trail opacity eases down as the city gets busier: 1 while the
+ * number of trips starting (±10 min) is below `knee` × the day's peak, then
+ * (knee / r)^gamma, never below `floor`. Quiet hours keep full brightness.
+ */
+export const PEAK_DIM = { knee: 0.4, gamma: 0.7, floor: 0.5 };
+
+/**
+ * Glow: a wide, faint pass drawn under the trails (same data, same culling), so
+ * corridors and bridges bloom a little. Scaled by PEAK_DIM squared, so it is
+ * strongest in the quiet hours and nearly gone at rush hour, where overlapping
+ * halos would wash Midtown out. Off when trails are thinned (phones).
+ */
+export const HALO = { widthPx: 4.5, opacity: 0.07 };
+
+/** Phones and coarse pointers draw half the trails (decode.ts). `?density=full|half` overrides. */
+export const THIN_MEDIA = '(max-width: 640px), (pointer: coarse)';
+
+/**
  * Camera. The poster is captured at POSTER_SIZE with this view; at runtime the
  * zoom is offset by log2(cover scale) so the live map lines up exactly with the
  * `background-size: cover` poster during the cross-fade.
@@ -43,10 +62,25 @@ export const VIEW = {
 };
 export const POSTER_SIZE = { width: 1600, height: 1000 };
 
+/**
+ * Portrait phones see a narrow vertical slice of the poster's frame, which by
+ * default is centred on the East River. There the poster is shown with
+ * `background-position: 40% 50%` (index.html, same media query) and the map is
+ * centred to match, which puts Midtown — the headline — mid-screen.
+ */
+export const PORTRAIT = { media: '(max-aspect-ratio: 4/5)', posterX: 0.4 };
+
 export const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 /** Near-black page background (also inlined in index.html). */
 export const BG = '#050608';
+
+/**
+ * Latest moment (ms after navigation) to start playing if the basemap is still
+ * loading tiles. The poster covers until then and cross-fades over whatever has
+ * arrived. The opening trips themselves are always waited for.
+ */
+export const REVEAL_DEADLINE_MS = 1500;
 
 /** Max concurrent chunk fetches. */
 export const FETCH_CONCURRENCY = 3;
