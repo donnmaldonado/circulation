@@ -20,7 +20,7 @@ export interface IntroHandle {
   onDismiss(fn: () => void): void;
 }
 
-export function mountIntro(manifest: Manifest, opts: { onChapter?: () => void } = {}): IntroHandle {
+export function mountIntro(manifest: Manifest): IntroHandle {
   const el = document.getElementById('intro');
   const listeners: (() => void)[] = [];
   let open = !!el;
@@ -37,12 +37,6 @@ export function mountIntro(manifest: Manifest, opts: { onChapter?: () => void } 
   document.documentElement.classList.add('intro-open');
 
   el.querySelector<HTMLButtonElement>('.intro-go')?.addEventListener('click', () => dismiss());
-  const chapterLink = el.querySelector<HTMLButtonElement>('[data-intro-chapter]');
-  chapterLink?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    dismiss();
-    opts.onChapter?.();
-  });
 
   // Any first gesture dismisses. Capture on window so it runs before the map
   // and the keyboard shortcuts; events that land on the overlay itself are

@@ -1,50 +1,49 @@
 {
-  "date": "2025-09-11",
-  "weekday": "Thursday",
-  "raw_trips": 199749,
+  "date": "2026-06-03",
+  "weekday": "Wednesday",
+  "raw_trips": 204801,
   "raw_trips_note": "trips with started_at on this date (NYC local), before cleaning; day chosen by this raw count",
-  "clean_trips": 195875,
+  "clean_trips": 200603,
   "dropped": {
     "short": 0,
-    "long": 153,
-    "null_station": 399,
-    "round_trip": 3322
+    "long": 178,
+    "null_station": 499,
+    "round_trip": 3521
   },
   "dropped_note": "each trip counted once, under the first rule it fails in the order listed",
   "candidate_top5": [
     {
-      "date": "2025-09-11",
-      "weekday": "Thursday",
-      "trips": 199749
-    },
-    {
-      "date": "2025-09-18",
-      "weekday": "Thursday",
-      "trips": 199311
-    },
-    {
-      "date": "2025-06-11",
+      "date": "2026-06-03",
       "weekday": "Wednesday",
-      "trips": 193279
+      "trips": 204801
     },
     {
-      "date": "2025-06-04",
-      "weekday": "Wednesday",
-      "trips": 192373
-    },
-    {
-      "date": "2025-06-12",
+      "date": "2026-06-18",
       "weekday": "Thursday",
-      "trips": 192259
+      "trips": 202997
+    },
+    {
+      "date": "2026-06-24",
+      "weekday": "Wednesday",
+      "trips": 200607
+    },
+    {
+      "date": "2026-06-10",
+      "weekday": "Wednesday",
+      "trips": 198095
+    },
+    {
+      "date": "2026-07-23",
+      "weekday": "Thursday",
+      "trips": 197316
     }
   ],
   "months_used": [
-    "2025-06",
-    "2025-07",
-    "2025-08",
-    "2025-09"
+    "2026-06",
+    "2026-07",
+    "2026-08"
   ],
-  "station_coords_month": "2025-09",
-  "unique_pairs": 125098,
-  "stations": 2160
+  "station_coords_month": "2026-06",
+  "unique_pairs": 129819,
+  "stations": 2251
 }

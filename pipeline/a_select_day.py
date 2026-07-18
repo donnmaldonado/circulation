@@ -1,11 +1,12 @@
 """Workstream A, step 2: pick the day, clean its trips, and write the day's outputs.
 
 Usage:  cd pipeline && uv run python a_select_day.py
-Needs:  data/trips/2025-06..09.parquet (from a_ingest.py)
+Needs:  data/trips/2026-06..08.parquet (from a_ingest.py)
 
-Day rule: the Tue/Wed/Thu in Jun-Sep 2025 with the most raw trips, counted by the calendar
+Day rule: the Tue/Wed/Thu in Jun-Aug 2026 with the most raw trips, counted by the calendar
 date of `started_at` (NYC local time, as given in the CSVs), before any cleaning.
-Monthly files are split by end time, so all four months are unioned before counting.
+Monthly files are split by end time, so all three months are unioned before counting.
+August 2026 is the newest month published; September's file would complete Aug 31, a Monday.
 
 Cleaning (each dropped trip is attributed to the first rule it fails, in this order):
   short        duration < 60 s (includes negative durations)
@@ -16,7 +17,7 @@ Coordinates are snapped to each station's median lat/lng over the chosen day's c
 (start and end appearances pooled); station name is the most common name seen for that id.
 
 Outputs (pipeline/out/): day.parquet, stations.parquet, pairs.parquet, day.json,
-daily_counts_2025_summer.csv
+daily_counts_2026_summer.csv
 """
 
 import json
@@ -25,9 +26,9 @@ from pathlib import Path
 import duckdb
 
 HERE = Path(__file__).parent
-TRIPS_GLOB = str(HERE / "data" / "trips" / "2025-0[6-9].parquet")
+TRIPS_GLOB = str(HERE / "data" / "trips" / "2026-0[6-8].parquet")
 OUT = HERE / "out"
-MONTHS = ["2025-06", "2025-07", "2025-08", "2025-09"]
+MONTHS = ["2026-06", "2026-07", "2026-08"]
 MIN_S, MAX_S = 60, 3 * 3600
 WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
@@ -38,18 +39,18 @@ def main() -> None:
     con.execute("SET memory_limit='6GB'; SET threads=6;")
     con.execute(f"CREATE VIEW all_trips AS SELECT * FROM read_parquet('{TRIPS_GLOB}')")
 
-    # --- daily raw counts, Jun 1 - Sep 30 by started_at date -------------------------------
+    # --- daily raw counts, Jun 1 - Aug 31 by started_at date -------------------------------
     con.execute(
         """
         CREATE TABLE daily AS
         SELECT CAST(started_at AS DATE) AS date, dayofweek(started_at) AS dow, count(*) AS trips
         FROM all_trips
-        WHERE started_at >= DATE '2025-06-01' AND started_at < DATE '2025-10-01'
+        WHERE started_at >= DATE '2026-06-01' AND started_at < DATE '2026-09-01'
         GROUP BY ALL ORDER BY date
         """
     )
     daily = con.execute("SELECT date, dow, trips FROM daily ORDER BY date").fetchall()
-    with open(OUT / "daily_counts_2025_summer.csv", "w") as f:
+    with open(OUT / "daily_counts_2026_summer.csv", "w") as f:
         f.write("date,weekday,trips\n")
         for d, dow, n in daily:
             f.write(f"{d},{WEEKDAYS[dow]},{n}\n")

@@ -33,7 +33,7 @@ async function boot(): Promise<App> {
   const source = await resolveDataSource(params);
   mark('manifest');
   // The intro is static markup (first paint); fill it from the manifest and arm dismissal.
-  const intro = POSTER_MODE || params.has('nointro') ? null : mountIntro(source.manifest, { onChapter: () => panels?.open('chapter') });
+  const intro = POSTER_MODE || params.has('nointro') ? null : mountIntro(source.manifest);
   if (!intro) {
     document.getElementById('intro')?.remove();
     document.documentElement.classList.remove('intro-open');
@@ -64,7 +64,7 @@ async function boot(): Promise<App> {
   const hud = POSTER_MODE ? null : mountControls(root, clock);
   const scrubber = hud ? mountScrubber(hud.slot, clock, source.manifest.histogram) : null;
   const panels = hud
-    ? mountPanels({ root, navSlot: hud.navSlot, base: source.base, scene, manifest: source.manifest, isFixture: source.isFixture })
+    ? mountPanels({ root, navSlot: hud.navSlot, manifest: source.manifest, isFixture: source.isFixture })
     : null;
   if (hud) {
     // --hud-h: height of the bottom HUD, so panels and the attribution can sit above it.

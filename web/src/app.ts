@@ -29,7 +29,7 @@ export interface App {
   params: URLSearchParams;
   /** Intro overlay; null in ?poster / ?nointro mode. */
   intro: IntroHandle | null;
-  /** Chapter / About panels; null in ?poster mode. */
+  /** About panel; null in ?poster mode. */
   panels: PanelsHandle | null;
   /** True when only half the trails are drawn (phones). */
   thin: boolean;

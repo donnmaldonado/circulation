@@ -1,24 +1,24 @@
 {
  "source": "pipeline/c_encode.py",
- "date": "2025-09-11",
+ "date": "2026-06-03",
  "simplify_m": 5.0,
  "casual_sample": 1.0,
  "budget_measure_used": "tolerance only",
  "degenerate_paths_fallback": 0,
  "deduped_vertices": 0,
- "encoded_trips": 195875,
- "cleaned_trips": 195875,
- "total_vertices": 2350027,
+ "encoded_trips": 200603,
+ "cleaned_trips": 200603,
+ "total_vertices": 2406916,
  "mean_vertices_per_trip": 12.0,
- "total_bytes": 15079825,
- "manifest_bytes": 2237,
- "stations_json_bytes": 656379,
+ "total_bytes": 15444799,
+ "manifest_bytes": 2248,
+ "stations_json_bytes": 683308,
  "first3": {
-  "hours_07_09_plus_manifest": 2837635,
-  "hours_00_02_plus_manifest": 267359,
-  "hours_06_08_plus_manifest": 2353728,
-  "hours_08_10_plus_manifest": 2624396,
-  "worst_any_3_consecutive_plus_manifest": 4252728
+  "hours_07_09_plus_manifest": 2788814,
+  "hours_00_02_plus_manifest": 259406,
+  "hours_06_08_plus_manifest": 2344817,
+  "hours_08_10_plus_manifest": 2554793,
+  "worst_any_3_consecutive_plus_manifest": 4384668
  },
  "budget": {
   "total_max": 25000000,
@@ -27,190 +27,190 @@
  "peak_hour": {
   "hour": 17,
   "file": "trips-17.bin",
-  "bytes": 1599082,
-  "trips": 20096,
-  "vertices": 249765
+  "bytes": 1620632,
+  "trips": 20248,
+  "vertices": 253230
  },
  "per_hour": [
   {
    "hour": 0,
    "file": "trips-00.bin",
-   "bytes": 151221,
-   "trips": 1923,
-   "vertices": 23599
+   "bytes": 150832,
+   "trips": 1856,
+   "vertices": 23590
   },
   {
    "hour": 1,
    "file": "trips-01.bin",
-   "bytes": 71804,
-   "trips": 958,
-   "vertices": 11167
+   "bytes": 67179,
+   "trips": 861,
+   "vertices": 10477
   },
   {
    "hour": 2,
    "file": "trips-02.bin",
-   "bytes": 42097,
-   "trips": 551,
-   "vertices": 6555
+   "bytes": 39147,
+   "trips": 489,
+   "vertices": 6115
   },
   {
    "hour": 3,
    "file": "trips-03.bin",
-   "bytes": 26465,
-   "trips": 349,
-   "vertices": 4118
+   "bytes": 28864,
+   "trips": 350,
+   "vertices": 4517
   },
   {
    "hour": 4,
    "file": "trips-04.bin",
-   "bytes": 34831,
-   "trips": 413,
-   "vertices": 5459
+   "bytes": 36435,
+   "trips": 459,
+   "vertices": 5688
   },
   {
    "hour": 5,
    "file": "trips-05.bin",
-   "bytes": 115845,
-   "trips": 1545,
-   "vertices": 18018
+   "bytes": 113693,
+   "trips": 1543,
+   "vertices": 17661
   },
   {
    "hour": 6,
    "file": "trips-06.bin",
-   "bytes": 344020,
-   "trips": 4556,
-   "vertices": 53538
+   "bytes": 362754,
+   "trips": 4686,
+   "vertices": 56552
   },
   {
    "hour": 7,
    "file": "trips-07.bin",
-   "bytes": 800249,
-   "trips": 10291,
-   "vertices": 124797
+   "bytes": 767140,
+   "trips": 9800,
+   "vertices": 119688
   },
   {
    "hour": 8,
    "file": "trips-08.bin",
-   "bytes": 1207222,
-   "trips": 15350,
-   "vertices": 188410
+   "bytes": 1212675,
+   "trips": 15327,
+   "vertices": 189338
   },
   {
    "hour": 9,
    "file": "trips-09.bin",
-   "bytes": 827927,
-   "trips": 11029,
-   "vertices": 128795
+   "bytes": 806751,
+   "trips": 10779,
+   "vertices": 125474
   },
   {
    "hour": 10,
    "file": "trips-10.bin",
-   "bytes": 587010,
-   "trips": 7800,
-   "vertices": 91333
+   "bytes": 533119,
+   "trips": 7229,
+   "vertices": 82827
   },
   {
    "hour": 11,
    "file": "trips-11.bin",
-   "bytes": 542702,
-   "trips": 7456,
-   "vertices": 84235
+   "bytes": 528358,
+   "trips": 7238,
+   "vertices": 82026
   },
   {
    "hour": 12,
    "file": "trips-12.bin",
-   "bytes": 617510,
-   "trips": 8500,
-   "vertices": 95833
+   "bytes": 571164,
+   "trips": 7956,
+   "vertices": 88562
   },
   {
    "hour": 13,
    "file": "trips-13.bin",
-   "bytes": 645132,
-   "trips": 8772,
-   "vertices": 100210
+   "bytes": 614445,
+   "trips": 8481,
+   "vertices": 95338
   },
   {
    "hour": 14,
    "file": "trips-14.bin",
-   "bytes": 720203,
-   "trips": 9763,
-   "vertices": 111896
+   "bytes": 727566,
+   "trips": 9678,
+   "vertices": 113194
   },
   {
    "hour": 15,
    "file": "trips-15.bin",
-   "bytes": 850921,
-   "trips": 11027,
-   "vertices": 132629
+   "bytes": 822108,
+   "trips": 10758,
+   "vertices": 128051
   },
   {
    "hour": 16,
    "file": "trips-16.bin",
-   "bytes": 1057680,
-   "trips": 13608,
-   "vertices": 164938
+   "bytes": 1045277,
+   "trips": 13435,
+   "vertices": 163015
   },
   {
    "hour": 17,
    "file": "trips-17.bin",
-   "bytes": 1599082,
-   "trips": 20096,
-   "vertices": 249765
+   "bytes": 1620632,
+   "trips": 20248,
+   "vertices": 253230
   },
   {
    "hour": 18,
    "file": "trips-18.bin",
-   "bytes": 1554723,
-   "trips": 19563,
-   "vertices": 242816
+   "bytes": 1517703,
+   "trips": 19395,
+   "vertices": 236786
   },
   {
    "hour": 19,
    "file": "trips-19.bin",
-   "bytes": 1096686,
-   "trips": 14340,
-   "vertices": 170829
+   "bytes": 1244085,
+   "trips": 16035,
+   "vertices": 193983
   },
   {
    "hour": 20,
    "file": "trips-20.bin",
-   "bytes": 744560,
-   "trips": 9700,
-   "vertices": 116008
+   "bytes": 927026,
+   "trips": 12208,
+   "vertices": 144329
   },
   {
    "hour": 21,
    "file": "trips-21.bin",
-   "bytes": 576962,
-   "trips": 7462,
-   "vertices": 89940
+   "bytes": 584884,
+   "trips": 7628,
+   "vertices": 91122
   },
   {
    "hour": 22,
    "file": "trips-22.bin",
-   "bytes": 485571,
-   "trips": 6093,
-   "vertices": 75849
+   "bytes": 431742,
+   "trips": 5508,
+   "vertices": 67365
   },
   {
    "hour": 23,
    "file": "trips-23.bin",
-   "bytes": 379402,
-   "trips": 4730,
-   "vertices": 59290
+   "bytes": 691220,
+   "trips": 8656,
+   "vertices": 107988
   }
  ],
  "attempts": [
   {
    "simplify_m": 5.0,
    "casual_sample": 1.0,
-   "trips": 195875,
-   "total_bytes": 15079825,
-   "first3_0709_bytes_excl_manifest": 2835398,
-   "vertices": 2350027
+   "trips": 200603,
+   "total_bytes": 15444799,
+   "first3_0709_bytes_excl_manifest": 2786566,
+   "vertices": 2406916
   }
  ],
- "tide_arrivals_after_midnight_dropped": 931,
- "elapsed_s": 6.9
+ "tide_arrivals_after_midnight_dropped": 1622,
+ "elapsed_s": 7.3
 }

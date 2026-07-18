@@ -62,25 +62,6 @@ const SHOTS = [
     release: true,
   },
   {
-    name: 'chapter',
-    query: 't=08:30&paused',
-    steps: async (page) => {
-      await page.click('[data-open="chapter"]');
-      await page.waitForTimeout(700);
-    },
-  },
-  {
-    name: 'chapter-more',
-    query: 't=08:30&paused',
-    steps: async (page) => {
-      await page.click('[data-open="chapter"]');
-      await page.waitForTimeout(300);
-      await page.click('.ch-more summary');
-      await page.locator('.ch-more').scrollIntoViewIfNeeded();
-      await page.waitForTimeout(300);
-    },
-  },
-  {
     name: 'about',
     query: 't=08:30&paused',
     steps: async (page) => {

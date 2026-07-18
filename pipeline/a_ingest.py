@@ -1,7 +1,7 @@
 """Workstream A, step 1: download Citi Bike NYC monthly trip zips and convert each to parquet.
 
 Usage:  cd pipeline && uv run python a_ingest.py [YYYYMM ...]
-Default months: 202506 202507 202508 202509.
+Default months: 202606 202607 202608.
 
 Per month: download zip -> extract CSVs (skipping __MACOSX and JC- files) -> one parquet at
 data/trips/YYYY-MM.parquet (station ids as VARCHAR) -> delete CSVs and zip.
@@ -21,7 +21,7 @@ BASE_URL = "https://s3.amazonaws.com/tripdata"
 DATA = Path(__file__).parent / "data"
 RAW = DATA / "raw_a"  # per-month scratch; separate from other workstreams' downloads
 TRIPS = DATA / "trips"
-DEFAULT_MONTHS = ["202506", "202507", "202508", "202509"]
+DEFAULT_MONTHS = ["202606", "202607", "202608"]
 
 COLUMNS = {
     "ride_id": "VARCHAR",
