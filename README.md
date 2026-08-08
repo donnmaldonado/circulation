@@ -75,7 +75,7 @@ All numbers were measured on an M1 MacBook in Chromium with ANGLE/Metal, against
 
 ¹ One of three culled runs at this size dipped to 47 fps in the 17:00 hour. The glow pass made no measurable difference to it.
 
-- **First paint, about 0.1 s** (first-contentful-paint 108 ms). The poster frame and the intro headline are inlined into `index.html` at build time: a 40×25 blurred placeholder, then `poster.webp` (136 KB), then the headline text from `manifest.json`. So the insight is on screen before any JavaScript runs.
+- **First paint, about 0.1–0.2 s** (first-contentful-paint 108–188 ms across runs). The poster frame, the intro headline and the date are inlined into `index.html` at build time: a 40×25 blurred placeholder, then `poster.webp` (136 KB), then the headline text from `manifest.json`. So the insight is on screen before any JavaScript runs.
 - **Playing by about 1.5 s.** `index.html` preloads the manifest and the two chunks the opening frame needs, in parallel with the JS bundle. The first chunk is decoded by about 0.2 s. Three cold runs of `npm run verify -- --preview` started playing at 1.52, 1.54 and 1.54 s. Playback starts once those trips are decoded and the basemap is idle, and never later than 1.5 s after navigation. Tiles that arrive after that fill in under the poster's cross-fade. - **Frame rate, full day at 720×** (`node scripts/fps-day.mjs`): **min 60.0 / avg 60.0 fps** at 1440×900 @2x, and avg 60.0 (worst hour 59.8) at 390×844 @3x. deck.gl CPU time is 2.3–3.2 ms per frame.
 - **Bundle**: 473 KB of JS gzipped (MapLibre about 300 KB, deck.gl about 160 KB, plus a separate MapLibre worker) and 15 KB of CSS.
 

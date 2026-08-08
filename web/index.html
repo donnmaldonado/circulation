@@ -38,6 +38,7 @@
         text-shadow: 0 1px 8px #000; }
       .brand h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.32em; text-transform: uppercase; color: #eef1f6; }
       .brand p { margin: 4px 0 0; color: #8b93a3; letter-spacing: 0.02em; }
+      .brand p b { font-weight: 600; color: #f3f5f8; }
       .fixture-badge { display: none; margin-left: 8px; padding: 1px 6px; border: 1px solid #3a3f4a; border-radius: 4px;
         font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9aa3b5; }
       .is-fixture .fixture-badge { display: inline-block; }
@@ -53,7 +54,7 @@
       <section id="intro" class="intro" aria-label="Introduction">
         <div class="intro-scrim"></div>
         <div class="intro-body">
-          <p class="intro-kicker"><span data-intro-date>%INTRO_DATE%</span> · <span data-intro-trips>%INTRO_TRIPS%</span> Citi Bike trips</p>
+          <p class="intro-kicker"><span class="intro-date" data-intro-date>%INTRO_DATE%</span><span data-intro-trips>%INTRO_TRIPS%</span> Citi Bike trips</p>
           <p class="intro-title" role="heading" aria-level="2">Circulation</p>
           <p class="intro-lede">Every bike-share trip of one New York weekday, replayed as light along estimated street routes. The dots are stations: rose while they fill with bikes, violet while they empty.</p>
           <p class="intro-headline" data-intro-headline>%INTRO_HEADLINE%</p>
@@ -68,7 +69,7 @@
       </section>
       <header class="brand">
         <h1>Circulation</h1>
-        <p>One weekday of Citi Bike, every trip<span class="fixture-badge">synthetic fixture</span></p>
+        <p><b data-brand-date>%BRAND_DATE%</b> · every Citi Bike trip<span class="fixture-badge">synthetic fixture</span></p>
       </header>
     </div>
     <script type="module" src="/src/main.ts"></script>

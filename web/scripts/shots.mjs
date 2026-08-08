@@ -95,7 +95,7 @@ try {
     await page.waitForTimeout(1200); // poster cross-fade + tide fade-in
     if (!shot.keepIntro) {
       await page.evaluate(() => window.circ.intro?.dismiss(true));
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(600); // the brand line fades back in over 0.5 s
     }
     if (shot.steps) await shot.steps(page);
     const path = `${OUT}/${MOBILE ? 'm-' : ''}${shot.name}.png`;

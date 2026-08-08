@@ -1,8 +1,9 @@
-// Play/pause, clock readout, speed selector, legend. Keyboard: space toggles
+// Play/pause, clock readout (with the day), speed selector, legend. Keyboard: space toggles
 // play, ←/→ seek ∓/± 15 min, 1/2/3 pick a speed.
 
 import { COLORS, SPEEDS } from '../config';
 import { formatClock, type Clock } from '../playback/clock';
+import { formatDay } from './day';
 
 const PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z"/></svg>';
 const PAUSE =
@@ -18,7 +19,7 @@ export interface ControlsHandle {
   navSlot: HTMLElement;
 }
 
-export function mountControls(parent: HTMLElement, clock: Clock): ControlsHandle {
+export function mountControls(parent: HTMLElement, clock: Clock, date: string): ControlsHandle {
   const root = document.createElement('div');
   root.className = 'hud';
   root.innerHTML = `
@@ -31,7 +32,7 @@ export function mountControls(parent: HTMLElement, clock: Clock): ControlsHandle
     <div class="hud-row">
       <div class="controls">
         <button class="btn play" type="button" aria-label="Play"></button>
-        <div class="clock" aria-live="off"><span class="clock-time">--:--</span></div>
+        <div class="clock" aria-live="off"><span class="clock-day">${formatDay(date, 'short')}</span><span class="clock-time">--:--</span></div>
         <div class="speeds" role="radiogroup" aria-label="Playback speed">
           ${SPEEDS.map((s) => `<button type="button" role="radio" data-speed="${s}">${s}×</button>`).join('')}
         </div>

@@ -9,6 +9,7 @@
 import { COLORS } from '../config';
 import type { Manifest } from '../data/types';
 import type { StationSelection } from '../stations/selection';
+import { formatDay } from './day';
 
 export type PanelId = 'about';
 
@@ -108,15 +109,11 @@ function frame(body: string): string {
 const rgb = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 
 function aboutHtml(m: Manifest, isFixture: boolean): string {
-  const d = new Date(`${m.date}T12:00:00`);
-  const day = Number.isNaN(d.getTime())
-    ? m.date
-    : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   return `
     <div class="pn-kicker">About</div>
     <h2 class="pn-title">Circulation</h2>
     ${isFixture ? '<p class="ab-warn">You are looking at the <b>synthetic fixture</b>, not real trips.</p>' : ''}
-    <p>Every Citi Bike trip that started on ${day} — the busiest Tuesday, Wednesday or Thursday of June–August 2026 — replayed at 720×, a day in two minutes: ${m.totals.trips.toLocaleString('en-US')} trips.</p>
+    <p>Every Citi Bike trip that started on ${formatDay(m.date)} — the busiest Tuesday, Wednesday or Thursday of June–August 2026 — replayed at 720×, a day in two minutes: ${m.totals.trips.toLocaleString('en-US')} trips.</p>
     <ul class="ab-key">
       <li><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike trip · <i style="--c:${rgb(COLORS.classic)}"></i>classic bike; casual riders drawn dimmer than members.</li>
       <li><i class="dot" style="--c:var(--tide-sink)"></i>station filling up (more bikes arriving than leaving, per 15 min) · <i class="dot" style="--c:var(--tide-source)"></i>emptying out. Dot size = activity. Tap a station for where its riders go.</li>

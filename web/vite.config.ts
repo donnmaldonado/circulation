@@ -55,6 +55,7 @@ function introFromManifest(): Plugin {
       return html
         .replace('%DATA_PRELOADS%', preloads)
         .replace('%INTRO_DATE%', esc(dateLabel))
+        .replace('%BRAND_DATE%', esc(dateLabel))
         .replace('%INTRO_TRIPS%', m ? Number(m.totals.trips).toLocaleString('en-US') : '')
         .replace('%INTRO_HEADLINE%', esc(m?.headline ?? ''))
         .replace('%INTRO_SUB%', flip ? esc(`Then the tide turns. ${flip}`) : '');

@@ -11,6 +11,7 @@ import { startFpsMeter } from './ui/fps';
 import { mountIntro } from './ui/intro';
 import { mountPanels } from './ui/panels';
 import { revealLive } from './ui/poster';
+import { formatDay } from './ui/day';
 import { mountScrubber } from './ui/scrubber';
 import type { App } from './app';
 
@@ -32,6 +33,9 @@ async function boot(): Promise<App> {
   const { map, overlay, basemapReady } = createMap(mapEl);
   const source = await resolveDataSource(params);
   mark('manifest');
+  // The brand line names the day; inlined at build time, refilled here for whichever manifest loaded.
+  const brandDate = document.querySelector('[data-brand-date]');
+  if (brandDate) brandDate.textContent = formatDay(source.manifest.date);
   // The intro is static markup (first paint); fill it from the manifest and arm dismissal.
   const intro = POSTER_MODE || params.has('nointro') ? null : mountIntro(source.manifest);
   if (!intro) {
@@ -61,7 +65,7 @@ async function boot(): Promise<App> {
   store.onLoad(() => scene.requestRender());
 
   if (source.isFixture) document.documentElement.classList.add('is-fixture');
-  const hud = POSTER_MODE ? null : mountControls(root, clock);
+  const hud = POSTER_MODE ? null : mountControls(root, clock, source.manifest.date);
   const scrubber = hud ? mountScrubber(hud.slot, clock, source.manifest.histogram) : null;
   const panels = hud
     ? mountPanels({ root, navSlot: hud.navSlot, manifest: source.manifest, isFixture: source.isFixture })

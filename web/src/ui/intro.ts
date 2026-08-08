@@ -9,6 +9,7 @@
 // the HUD sits above the overlay and works straight away.
 
 import type { Manifest } from '../data/types';
+import { formatDay } from './day';
 
 const FADE_MS = 650;
 
@@ -88,11 +89,7 @@ function fill(el: HTMLElement, m: Manifest) {
     const node = el.querySelector(sel);
     if (node && text) node.textContent = text;
   };
-  const d = new Date(`${m.date}T12:00:00`);
-  const day = Number.isNaN(d.getTime())
-    ? m.date
-    : d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  set('[data-intro-date]', day);
+  set('[data-intro-date]', formatDay(m.date));
   set('[data-intro-trips]', m.totals.trips.toLocaleString('en-US'));
   set('[data-intro-headline]', m.headline);
   // The evening flip, if the encoder found one for the same region, turns the headline into a tide.
