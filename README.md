@@ -10,7 +10,7 @@ The day is Wednesday 3 June 2026, when 200,603 cleaned trips were taken. Each tr
 
 ▶ **[15-second capture](docs/circulation-15s.webm)** (webm, 4 MB). It shows the page load, the intro over the morning rush, and a click on the Penn Station dock. · [Phone, 390 px](docs/mobile.jpg)
 
-The page shows its poster frame at the first paint, about 0.1 s in, and is playing by about 1.5 s. It runs at 60 fps across the full 24 hours. You can drag the timeline and click any station to see where its riders go.
+The page shows its poster frame at the first paint, about 0.1 s in, and is playing by about 1.5 s. It runs at 60 fps across the full 24 hours. You can drag the timeline and click any station to see where its riders go. **Places** picks a named area, such as Central Park, Penn Station or Brooklyn Bridge Park, and shows only the rides that end there, or, with one toggle, the rides that start there. Each place is the set of docks that serve it; see `web/src/stations/places.ts`.
 
 ---
 
@@ -122,7 +122,7 @@ node scripts/shots.mjs --preview [--mobile]   # review screenshots
 node scripts/record.mjs              # docs/circulation-15s.webm
 ```
 
-URL parameters: `?t=HH:MM`, `?speed=`, `?paused`, `?debug` (fps meter), `?nointro`, `?data=fixture` (dev only; the fixture is left out of `dist`), `?density=full|half`, `?halo=0`, and `?nocull` (stock TripsLayer, for comparison). Keyboard: Space plays and pauses, ←/→ jumps 15 min, 1/2/3 sets the speed, Esc closes panels.
+URL parameters: `?t=HH:MM`, `?speed=`, `?paused`, `?debug` (fps meter), `?nointro`, `?place=central-park` (open on a place; add `&dir=out` for rides starting there), `?data=fixture` (dev only; the fixture is left out of `dist`), `?density=full|half`, `?halo=0`, and `?nocull` (stock TripsLayer, for comparison). Keyboard: Space plays and pauses, ←/→ jumps 15 min, 1/2/3 sets the speed, Esc closes panels.
 
 ## Credits
 

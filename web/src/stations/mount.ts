@@ -7,6 +7,7 @@ import type { ChunkStore } from '../data/loader';
 import type { Station } from '../data/types';
 import type { Scene } from '../map/scene';
 import type { Clock } from '../playback/clock';
+import { placeCenter } from './places';
 import { DIMMED_TIDE, StationSelection } from './selection';
 import { StationIndex } from './station-index';
 import { TideModel } from './tide-layer';
@@ -56,7 +57,7 @@ export function mountTide(o: TideOptions): TideHandle {
   let selection: StationSelection | null = null;
   scene.addProvider(
     'tide',
-    (t) => model.layers(t, selection && selection.station >= 0 ? DIMMED_TIDE : 1),
+    (t) => model.layers(t, selection?.active ? DIMMED_TIDE : 1),
     o.under ? ORDER.tideUnder : ORDER.tideOver,
   );
 
@@ -71,6 +72,13 @@ export function mountTide(o: TideOptions): TideHandle {
       pickingRadius: coarse ? 14 : 6,
       onClick: sel.handleClick,
       onHover: (info) => sel.handleHover(info, canvas),
+    });
+    // A place off screen (Prospect Park, Columbia from the opening view): bring it into view.
+    sel.onChange((active) => {
+      const place = active ? sel.place : null;
+      if (!place) return;
+      const [lng, lat] = placeCenter(place);
+      if (!o.map.getBounds().contains([lng, lat])) o.map.easeTo({ center: [lng, lat], duration: 900 });
     });
   }
 

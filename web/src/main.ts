@@ -6,6 +6,7 @@ import { createMap } from './map/map';
 import { Scene } from './map/scene';
 import { Clock, parseClock } from './playback/clock';
 import { mountTide } from './stations/mount';
+import { placeById } from './stations/places';
 import { mountControls } from './ui/controls';
 import { startFpsMeter } from './ui/fps';
 import { mountIntro } from './ui/intro';
@@ -95,7 +96,22 @@ async function boot(): Promise<App> {
       interactive: !POSTER_MODE,
       under: params.get('tide') === 'under',
     });
-    if (app.tide.selection) panels?.attachSelection(app.tide.selection);
+    const sel = app.tide.selection;
+    if (sel) {
+      panels?.attachSelection(sel);
+      // ?place=central-park[&dir=out] opens on a place; the URL follows the selection so it can be shared.
+      const place = placeById(params.get('place'));
+      if (place) sel.selectPlace(place, params.get('dir') === 'out' ? 'out' : 'in');
+      sel.onChange(() => {
+        const url = new URL(location.href);
+        const p = sel.place;
+        if (p) url.searchParams.set('place', p.id);
+        else url.searchParams.delete('place');
+        if (p && sel.dir === 'out') url.searchParams.set('dir', 'out');
+        else url.searchParams.delete('dir');
+        history.replaceState(null, '', url);
+      });
+    }
     mark('tide');
   });
 

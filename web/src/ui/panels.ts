@@ -1,17 +1,18 @@
-// About panel and its entry button.
+// Places and About panels and their entry buttons.
 //
-// One panel slot: the station panel (stations/selection.ts) and the about
-// panel occupy the same place — top-right on desktop, a bottom
-// sheet just above the HUD on phones — and only one is ever open. Opening the
-// panel clears the station selection; selecting a station closes the panel.
-// The entry button lives in the HUD's controls row (thumb reach on phones).
+// One panel slot: the selection panel (stations/selection.ts) and these
+// panels occupy the same place — top-right on desktop, a bottom
+// sheet just above the HUD on phones — and only one is ever open. Opening a
+// panel clears the selection; selecting a station or a place closes the panel.
+// The entry buttons live in the HUD's controls row (thumb reach on phones).
 
 import { COLORS } from '../config';
 import type { Manifest } from '../data/types';
+import { PLACES, placeById } from '../stations/places';
 import type { StationSelection } from '../stations/selection';
 import { formatDay } from './day';
 
-export type PanelId = 'about';
+export type PanelId = 'places' | 'about';
 
 export interface PanelsHandle {
   open(id: PanelId): void;
@@ -33,6 +34,7 @@ export function mountPanels(o: {
   const nav = document.createElement('div');
   nav.className = 'nav';
   nav.innerHTML = `
+    <button type="button" class="nav-btn" data-open="places" aria-expanded="false" aria-controls="panel" hidden>Places</button>
     <button type="button" class="nav-btn" data-open="about" aria-expanded="false" aria-controls="panel">About</button>`;
   o.navSlot.appendChild(nav);
 
@@ -62,7 +64,7 @@ export function mountPanels(o: {
     panel.className = `side-panel panel-${id}`;
     panel.hidden = false;
     panel.scrollTop = 0;
-    panel.innerHTML = frame(aboutHtml(o.manifest, o.isFixture));
+    panel.innerHTML = frame(id === 'places' ? placesHtml(selection) : aboutHtml(o.manifest, o.isFixture));
     panel.querySelector<HTMLElement>('.pn-close')?.focus({ preventScroll: true });
   }
 
@@ -81,7 +83,10 @@ export function mountPanels(o: {
     if (b) open(b.dataset.open as PanelId);
   });
   panel.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('.pn-close')) close();
+    const el = e.target as HTMLElement;
+    if (el.closest('.pn-close')) return close();
+    const place = placeById(el.closest<HTMLElement>('[data-place]')?.dataset.place);
+    if (place) selection?.selectPlace(place);
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && current) close();
@@ -95,8 +100,9 @@ export function mountPanels(o: {
     },
     attachSelection(sel) {
       selection = sel;
-      sel.onChange((s) => {
-        if (s >= 0 && current) close();
+      nav.querySelector<HTMLElement>('[data-open="places"]')!.hidden = false;
+      sel.onChange((active) => {
+        if (active && current) close();
       });
     },
   };
@@ -107,6 +113,21 @@ function frame(body: string): string {
 }
 
 const rgb = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+
+function placesHtml(sel: StationSelection | null): string {
+  const items = PLACES.map((p) => {
+    const tot = sel?.placeTotals(p);
+    const count = tot ? `<span class="pl-count"><b>${tot.inbound.toLocaleString('en-US')}</b> rides end here</span>` : '';
+    return `<li><button type="button" data-place="${p.id}">
+      <span class="pl-name">${p.name}</span>${count}
+      <span class="pl-blurb">${p.blurb}${tot ? ` · ${tot.docks} docks` : ''}</span></button></li>`;
+  }).join('');
+  return `
+    <div class="pn-kicker">Places</div>
+    <h2 class="pn-title">Where are they going?</h2>
+    <p>Pick a place to see only the rides that end there. You can switch to the rides that start there, too.</p>
+    <ul class="pl-list">${items}</ul>`;
+}
 
 function aboutHtml(m: Manifest, isFixture: boolean): string {
   return `
