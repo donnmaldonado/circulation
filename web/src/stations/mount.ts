@@ -8,7 +8,7 @@ import type { Station } from '../data/types';
 import type { Scene } from '../map/scene';
 import type { Clock } from '../playback/clock';
 import { placeCenter } from './places';
-import { DIMMED_TIDE, StationSelection } from './selection';
+import { type Dir, DIMMED_TIDE, StationSelection } from './selection';
 import { StationIndex } from './station-index';
 import { TideModel } from './tide-layer';
 import { NEUTRAL_CSS, SINK_CSS, SOURCE_CSS } from './tide-scale';
@@ -19,8 +19,7 @@ const ORDER = { selectionTrails: 5, tideOver: 10, tideUnder: -10, selectionMarks
 export interface TideHandle {
   index: StationIndex;
   model: TideModel;
-  /** null when not interactive (poster mode). */
-  selection: StationSelection | null;
+  selection: StationSelection;
 }
 
 export interface TideOptions {
@@ -34,7 +33,11 @@ export interface TideOptions {
   root: HTMLElement;
   /** Legend container to add the tide key to (optional). */
   legend?: HTMLElement | null;
+  /** Pointer handlers (click a dot, hover tooltip); off in poster mode, where the default filter is still drawn. */
   interactive: boolean;
+  /** Direction for the first selection, and whether the details panel starts open. */
+  dir: Dir;
+  details: boolean;
   under?: boolean;
 }
 
@@ -54,18 +57,15 @@ export function mountTide(o: TideOptions): TideHandle {
   root.setProperty('--tide-source', SOURCE_CSS);
   root.setProperty('--tide-neutral', NEUTRAL_CSS);
 
-  let selection: StationSelection | null = null;
-  scene.addProvider(
-    'tide',
-    (t) => model.layers(t, selection?.active ? DIMMED_TIDE : 1),
-    o.under ? ORDER.tideUnder : ORDER.tideOver,
-  );
+  const sel = new StationSelection(index, store, clock, () => scene.requestRender(), o.root, {
+    dir: o.dir,
+    details: o.details,
+  });
+  scene.addProvider('tide', (t) => model.layers(t, sel.active ? DIMMED_TIDE : 1), o.under ? ORDER.tideUnder : ORDER.tideOver);
+  scene.addProvider('selection-trails', (t) => sel.trailLayers(t), ORDER.selectionTrails);
+  scene.addProvider('selection-marks', () => sel.markLayers(), ORDER.selectionMarks);
 
   if (o.interactive) {
-    selection = new StationSelection(index, store, clock, () => scene.requestRender(), o.root);
-    const sel = selection;
-    scene.addProvider('selection-trails', (t) => sel.trailLayers(t), ORDER.selectionTrails);
-    scene.addProvider('selection-marks', () => sel.markLayers(), ORDER.selectionMarks);
     const canvas = o.map.getCanvas();
     const coarse = window.matchMedia('(pointer: coarse)').matches;
     o.overlay.setProps({
@@ -73,9 +73,13 @@ export function mountTide(o: TideOptions): TideHandle {
       onClick: sel.handleClick,
       onHover: (info) => sel.handleHover(info, canvas),
     });
-    // A place off screen (Prospect Park, Columbia from the opening view): bring it into view.
-    sel.onChange((active) => {
-      const place = active ? sel.place : null;
+    // A newly picked place off screen (Prospect Park from the opening view): bring it into view.
+    // Only on a new pick, not on every rebuild as hours load, so a pan away sticks.
+    let shown: string | null = null;
+    sel.onChange(() => {
+      const place = sel.place;
+      if (place?.id === shown) return;
+      shown = place?.id ?? null;
       if (!place) return;
       const [lng, lat] = placeCenter(place);
       if (!o.map.getBounds().contains([lng, lat])) o.map.easeTo({ center: [lng, lat], duration: 900 });
@@ -90,5 +94,5 @@ export function mountTide(o: TideOptions): TideHandle {
     o.legend.appendChild(key);
   }
 
-  return { index, model, selection };
+  return { index, model, selection: sel };
 }

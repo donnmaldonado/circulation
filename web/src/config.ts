@@ -3,12 +3,7 @@
 
 export const DAY_SECONDS = 86_400;
 
-/**
- * Opening moment: 07:30. The morning rush is already building, so the first
- * (poster) frame is busy, and at the default 720x the 08:00–09:00 peak — and
- * the 8:45 headline moment — arrive 3–10 s after the page starts playing,
- * well inside a reviewer's ~30 s glance.
- */
+/** Opening time: 07:30, with the morning rush already building. */
 export const START_TIME = 7.5 * 3600;
 
 /** Sim seconds per real second. 720x plays 24h in 2 minutes. */
@@ -51,24 +46,24 @@ export const THIN_MEDIA = '(max-width: 640px), (pointer: coarse)';
 /**
  * Camera. The poster is captured at POSTER_SIZE with this view; at runtime the
  * zoom is offset by log2(cover scale) so the live map lines up exactly with the
- * `background-size: cover` poster during the cross-fade.
+ * `background-size: cover` poster during the cross-fade. Centred on Central
+ * Park (the default filter) with Midtown and both sides of the park in frame.
  */
 export const VIEW = {
-  longitude: -73.9665,
-  latitude: 40.7335,
-  zoom: 12.35,
+  longitude: -73.972,
+  latitude: 40.772,
+  zoom: 12.5,
   pitch: 0,
   bearing: 0,
 };
 export const POSTER_SIZE = { width: 1600, height: 1000 };
 
 /**
- * Portrait phones see a narrow vertical slice of the poster's frame, which by
- * default is centred on the East River. There the poster is shown with
- * `background-position: 40% 50%` (index.html, same media query) and the map is
- * centred to match, which puts Midtown — the headline — mid-screen.
+ * What the page opens on: the rides leaving Central Park. `?place=<id>`,
+ * `?station=<id>` and `?dir=in|out` override it; `?place=all` shows every trip
+ * unfiltered.
  */
-export const PORTRAIT = { media: '(max-aspect-ratio: 4/5)', posterX: 0.4 };
+export const DEFAULT_FILTER = { place: 'central-park', dir: 'out' } as const;
 
 export const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 

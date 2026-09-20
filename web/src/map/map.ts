@@ -12,7 +12,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // bundler can't see. Hand it an explicitly bundled worker instead.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { BASEMAP_STYLE, PORTRAIT, POSTER_SIZE, VIEW } from '../config';
+import { BASEMAP_STYLE, POSTER_SIZE, VIEW } from '../config';
 
 export interface MapHandle {
   map: MapLibreMap;
@@ -30,20 +30,6 @@ export function coverZoom(width: number, height: number): number {
   return VIEW.zoom + Math.log2(scale);
 }
 
-/**
- * Map centre that matches the poster as the page shows it: on portrait screens
- * the poster is positioned at PORTRAIT.posterX instead of 50%, so shift the
- * centre by the same number of poster pixels (converted at the poster's zoom).
- */
-export function coverCenter(width: number, height: number): [number, number] {
-  if (!window.matchMedia(PORTRAIT.media).matches) return [VIEW.longitude, VIEW.latitude];
-  const s = Math.max(width / POSTER_SIZE.width, height / POSTER_SIZE.height);
-  const imgW = POSTER_SIZE.width * s;
-  const xc = (width / 2 - (width - imgW) * PORTRAIT.posterX) / s; // visible centre, poster px
-  const degPerPx = 360 / (512 * 2 ** VIEW.zoom);
-  return [VIEW.longitude + (xc - POSTER_SIZE.width / 2) * degPerPx, VIEW.latitude];
-}
-
 setWorkerUrl(maplibreWorkerUrl);
 
 export function createMap(container: HTMLElement): MapHandle {
@@ -51,7 +37,7 @@ export function createMap(container: HTMLElement): MapHandle {
   const map = new MapLibreMap({
     container,
     style: BASEMAP_STYLE,
-    center: coverCenter(w, h),
+    center: [VIEW.longitude, VIEW.latitude],
     zoom: coverZoom(w, h),
     pitch: VIEW.pitch,
     bearing: VIEW.bearing,

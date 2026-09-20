@@ -1,16 +1,16 @@
 # Circulation
 
-**One real weekday of every Citi Bike trip in New York, replayed as light. Citi Bike is the city's bloodstream.**
-
-> **From 8 to 9am, the Upper West Side sends out 2.6× more bikes than it takes in** (1,116 out, 437 in, across 48 stations). Then the tide turns: from 5 to 6pm, it absorbs 1.5× more than it sends out.
+**A trip explorer for one real weekday of Citi Bike in New York. Pick a place or a station and see where its riders go, or where they come from.**
 
 The day is Wednesday 3 June 2026, when 200,603 cleaned trips were taken. Each trip is drawn as a glowing trail along an estimated street route. E-bikes are cyan and classic bikes are ember; casual riders are drawn dimmer than members. Above the trails sits the **tide**: every station glows rose while it fills with bikes and violet while it empties.
 
-![Circulation at 07:30: intro overlay over the live map](docs/screenshot.jpg)
+![Circulation at 07:30: the default filter, rides leaving Central Park](docs/screenshot.jpg)
 
-▶ **[15-second capture](docs/circulation-15s.webm)** (webm, 4 MB). It shows the page load, the intro over the morning rush, and a click on the Penn Station dock. · [Phone, 390 px](docs/mobile.jpg)
+▶ **[15-second capture](docs/circulation-15s.webm)** (webm, 2 MB). It shows the page load on rides leaving Central Park, a switch to rides arriving there, and a click on the Penn Station dock. · [Phone, 390 px](docs/mobile.jpg)
 
-The page shows its poster frame at the first paint, about 0.1 s in, and is playing by about 1.5 s. It runs at 60 fps across the full 24 hours. You can drag the timeline and click any station to see where its riders go. **Places** picks a named area, such as Central Park, Penn Station or Brooklyn Bridge Park, and shows only the rides that end there, or, with one toggle, the rides that start there. Each place is the set of docks that serve it; see `web/src/stations/places.ts`.
+The page opens on **the rides leaving Central Park**. The bar at the top left is the filter. Its picker chooses **All of New York City**, a named place (Central Park, Penn Station, Brooklyn Bridge Park and others), or the station you last clicked on the map. Its **Leaving / Arriving** toggle shows the count for each direction. **Details** opens the panel with rides by hour and the busiest docks at the other end. The direction carries over when you change place or click a station. The address bar follows the filter, so any view can be shared. Each place is the set of docks that serve it; see `web/src/stations/places.ts`.
+
+The page shows its poster frame (the default filter at 07:30) at the first paint, about 0.1 s in, and is playing by about 1.5 s. It runs at 60 fps across the full 24 hours. Drag the timeline to scrub.
 
 ---
 
@@ -75,13 +75,13 @@ All numbers were measured on an M1 MacBook in Chromium with ANGLE/Metal, against
 
 ¹ One of three culled runs at this size dipped to 47 fps in the 17:00 hour. The glow pass made no measurable difference to it.
 
-- **First paint, about 0.1–0.2 s** (first-contentful-paint 108–188 ms across runs). The poster frame, the intro headline and the date are inlined into `index.html` at build time: a 40×25 blurred placeholder, then `poster.webp` (136 KB), then the headline text from `manifest.json`. So the insight is on screen before any JavaScript runs.
+- **First paint, about 0.1–0.2 s** (first-contentful-paint 108–188 ms across runs). The poster frame and the date are inlined into `index.html` at build time: a 40×25 blurred placeholder, then `poster.webp` (142 KB), then the date from `manifest.json`. `stations.json` is preloaded too, and the reveal waits for it, so the live map opens on the same filtered view the poster shows.
 - **Playing by about 1.5 s.** `index.html` preloads the manifest and the two chunks the opening frame needs, in parallel with the JS bundle. The first chunk is decoded by about 0.2 s. Three cold runs of `npm run verify -- --preview` started playing at 1.52, 1.54 and 1.54 s. Playback starts once those trips are decoded and the basemap is idle, and never later than 1.5 s after navigation. Tiles that arrive after that fill in under the poster's cross-fade. - **Frame rate, full day at 720×** (`node scripts/fps-day.mjs`): **min 60.0 / avg 60.0 fps** at 1440×900 @2x, and avg 60.0 (worst hour 59.8) at 390×844 @3x. deck.gl CPU time is 2.3–3.2 ms per frame.
 - **Bundle**: 473 KB of JS gzipped (MapLibre about 300 KB, deck.gl about 160 KB, plus a separate MapLibre worker) and 15 KB of CSS.
 
 **Look.** Trails are blended additively. At rush hour, trail opacity eases down with how busy the city is, read from the manifest histogram (`PEAK_DIM`), so Midtown's avenues glow without washing out to flat white. A faint 4.5 px glow pass under the trails fades out harder at peaks, so bridges and quiet streets glow at night.
 
-**Phones** (`(max-width: 640px), (pointer: coarse)`): **half the trails are drawn**. Every trip is still decoded, so station counts and the tide stay exact. Within each render group, only the trips with an even index in the file are drawn. The decoder sorts those trips first, so each group's draw range is a contiguous prefix with no copies. Phones also skip the glow pass, and portrait screens are framed on Midtown. The controls sit in the bottom 150 px: a one-button speed cycle and an About button. The about and station panels share one bottom sheet above the timeline. On desktop they share the top-right slot, and only one is open at a time.
+**Phones** (`(max-width: 640px), (pointer: coarse)`): **half the trails are drawn**. Every trip is still decoded, so station counts and the tide stay exact. Within each render group, only the trips with an even index in the file are drawn. The decoder sorts those trips first, so each group's draw range is a contiguous prefix with no copies. Phones also skip the glow pass. The filter bar wraps to two rows at the top. The playback controls sit in the bottom 150 px: a one-button speed cycle and an About button. The details panel starts closed on phones and open on desktop. About and the details share one slot: the top-right on desktop, and a bottom sheet above the timeline on phones. Opening About hides the details but leaves the filter as it is.
 
 ## Findings
 
@@ -122,7 +122,7 @@ node scripts/shots.mjs --preview [--mobile]   # review screenshots
 node scripts/record.mjs              # docs/circulation-15s.webm
 ```
 
-URL parameters: `?t=HH:MM`, `?speed=`, `?paused`, `?debug` (fps meter), `?nointro`, `?place=central-park` (open on a place; add `&dir=out` for rides starting there), `?data=fixture` (dev only; the fixture is left out of `dist`), `?density=full|half`, `?halo=0`, and `?nocull` (stock TripsLayer, for comparison). Keyboard: Space plays and pauses, ←/→ jumps 15 min, 1/2/3 sets the speed, Esc closes panels.
+URL parameters: `?t=HH:MM`, `?speed=`, `?paused`, `?debug` (fps meter), `?place=<id>` (open on a place, e.g. `penn-station`; `all` for no filter; default `central-park`), `?station=<id>` (open on a station, by Citi Bike station id), `?dir=in|out` (rides arriving or leaving; default `out`), `?data=fixture` (dev only; the fixture is left out of `dist`), `?density=full|half`, `?halo=0`, and `?nocull` (stock TripsLayer, for comparison). Keyboard: Space plays and pauses, ←/→ jumps 15 min, 1/2/3 sets the speed, Esc closes About, then hides the details.
 
 ## Credits
 

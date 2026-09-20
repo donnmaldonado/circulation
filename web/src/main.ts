@@ -1,5 +1,5 @@
 import './style.css';
-import { DEFAULT_SPEED, REVEAL_DEADLINE_MS, START_TIME, THIN_MEDIA } from './config';
+import { DEFAULT_FILTER, DEFAULT_SPEED, REVEAL_DEADLINE_MS, START_TIME, THIN_MEDIA } from './config';
 import { ChunkStore, loadStations, resolveDataSource } from './data/loader';
 import { buildTripsLayers, setVertexCulling } from './layers/trips';
 import { createMap } from './map/map';
@@ -7,9 +7,10 @@ import { Scene } from './map/scene';
 import { Clock, parseClock } from './playback/clock';
 import { mountTide } from './stations/mount';
 import { placeById } from './stations/places';
+import type { StationSelection } from './stations/selection';
 import { mountControls } from './ui/controls';
+import { mountFilter } from './ui/filter';
 import { startFpsMeter } from './ui/fps';
-import { mountIntro } from './ui/intro';
 import { mountPanels } from './ui/panels';
 import { revealLive } from './ui/poster';
 import { formatDay } from './ui/day';
@@ -34,15 +35,9 @@ async function boot(): Promise<App> {
   const { map, overlay, basemapReady } = createMap(mapEl);
   const source = await resolveDataSource(params);
   mark('manifest');
-  // The brand line names the day; inlined at build time, refilled here for whichever manifest loaded.
+  // The title line names the day; inlined at build time, refilled here for whichever manifest loaded.
   const brandDate = document.querySelector('[data-brand-date]');
   if (brandDate) brandDate.textContent = formatDay(source.manifest.date);
-  // The intro is static markup (first paint); fill it from the manifest and arm dismissal.
-  const intro = POSTER_MODE || params.has('nointro') ? null : mountIntro(source.manifest);
-  if (!intro) {
-    document.getElementById('intro')?.remove();
-    document.documentElement.classList.remove('intro-open');
-  }
   const stationsReady = loadStations(source).catch((err) => {
     console.error('[circulation] stations.json failed; tide layer off', err);
     return null;
@@ -78,10 +73,10 @@ async function boot(): Promise<App> {
     setHudH();
   }
 
-  const app: App = { clock, store, scene, map, overlay, source, hud, scrubber, tide: null, params, intro, panels, thin: THIN };
+  const app: App = { clock, store, scene, map, overlay, source, hud, scrubber, tide: null, params, panels, thin: THIN };
   (window as unknown as { circ: App }).circ = app;
 
-  // Tide dots + station selection, once stations.json is in (fades in; never blocks the reveal).
+  // Tide dots, station selection and the opening filter, once stations.json is in (preloaded; the reveal waits for it).
   const tideReady = stationsReady.then((stations) => {
     if (!stations) return;
     app.tide = mountTide({
@@ -94,24 +89,16 @@ async function boot(): Promise<App> {
       root,
       legend: hud?.root.querySelector<HTMLElement>('.legend'),
       interactive: !POSTER_MODE,
+      dir: params.get('dir') === 'in' ? 'in' : params.get('dir') === 'out' ? 'out' : DEFAULT_FILTER.dir,
+      // Desktop opens with the details beside the map; phones keep the map clear (the bar's Details button opens them).
+      details: !THIN,
       under: params.get('tide') === 'under',
     });
     const sel = app.tide.selection;
-    if (sel) {
-      panels?.attachSelection(sel);
-      // ?place=central-park[&dir=out] opens on a place; the URL follows the selection so it can be shared.
-      const place = placeById(params.get('place'));
-      if (place) sel.selectPlace(place, params.get('dir') === 'out' ? 'out' : 'in');
-      sel.onChange(() => {
-        const url = new URL(location.href);
-        const p = sel.place;
-        if (p) url.searchParams.set('place', p.id);
-        else url.searchParams.delete('place');
-        if (p && sel.dir === 'out') url.searchParams.set('dir', 'out');
-        else url.searchParams.delete('dir');
-        history.replaceState(null, '', url);
-      });
-    }
+    applyFilterFromUrl(sel, stations);
+    const slot = document.querySelector<HTMLElement>('[data-slot="filter"]');
+    if (slot && !POSTER_MODE) mountFilter(slot, sel, stations, panels);
+    sel.onChange(() => syncUrl(sel, stations));
     mark('tide');
   });
 
@@ -120,10 +107,10 @@ async function boot(): Promise<App> {
     app.fps = fps;
   }
 
-  // ---- first frame: wait for the trips that are on screen now + the basemap.
+  // ---- first frame: wait for the trips that are on screen now, the filter + the basemap.
   const h = clock.hour;
   const needed = POSTER_MODE ? [h, (h + 23) % 24, (h + 22) % 24, (h + 21) % 24] : [h, (h + 23) % 24];
-  await store.whenLoaded(needed);
+  await Promise.all([store.whenLoaded(needed), tideReady]);
   mark('first-chunk');
   // Wait for the basemap, but never past REVEAL_DEADLINE_MS after navigation: late tiles
   // fill in under the poster's cross-fade; a late start would miss the reviewer's glance.
@@ -134,7 +121,6 @@ async function boot(): Promise<App> {
   await nextDeckFrame(scene);
 
   if (POSTER_MODE) {
-    await tideReady;
     await nextDeckFrame(scene);
     await nextDeckFrame(scene);
     document.documentElement.classList.add('poster-mode');
@@ -149,6 +135,35 @@ async function boot(): Promise<App> {
   mark('playing');
   logTimings();
   return app;
+}
+
+/**
+ * The opening filter: `?station=<id>`, else `?place=<id>` (`all` for no
+ * filter), else DEFAULT_FILTER. The direction (`?dir=`) was set on the selection.
+ */
+function applyFilterFromUrl(sel: StationSelection, stations: { id: string }[]) {
+  const stationId = params.get('station');
+  const s = stationId ? stations.findIndex((st) => st.id === stationId) : -1;
+  if (s >= 0) return sel.select(s);
+  const placeId = params.get('place') ?? DEFAULT_FILTER.place;
+  if (placeId === 'all') return;
+  const place = placeById(placeId) ?? placeById(DEFAULT_FILTER.place);
+  if (place) sel.selectPlace(place);
+}
+
+/** Keep the address bar on the current filter so it can be shared; the default filter leaves it clean. */
+function syncUrl(sel: StationSelection, stations: { id: string }[]) {
+  const url = new URL(location.href);
+  const q = url.searchParams;
+  q.delete('place');
+  q.delete('station');
+  q.delete('dir');
+  const place = sel.place?.id ?? null;
+  if (sel.station >= 0) q.set('station', stations[sel.station].id);
+  else if (!sel.active) q.set('place', 'all');
+  else if (place !== DEFAULT_FILTER.place) q.set('place', place!);
+  if (sel.active && sel.dir !== DEFAULT_FILTER.dir) q.set('dir', sel.dir);
+  if (url.href !== location.href) history.replaceState(null, '', url);
 }
 
 function delay(ms: number) {

@@ -9,7 +9,6 @@ import type { Clock } from './playback/clock';
 import type { TideHandle } from './stations/mount';
 import type { ControlsHandle } from './ui/controls';
 import type { FpsStats } from './ui/fps';
-import type { IntroHandle } from './ui/intro';
 import type { PanelsHandle } from './ui/panels';
 import type { ScrubberHandle } from './ui/scrubber';
 
@@ -24,11 +23,9 @@ export interface App {
   hud: ControlsHandle | null;
   /** Day scrubber in the HUD slot; null in ?poster mode. */
   scrubber: ScrubberHandle | null;
-  /** Tide dots, station↔trip index and station selection; null until stations.json loads. */
+  /** Tide dots, station↔trip index and the selection (the filter); null until stations.json loads. */
   tide: TideHandle | null;
   params: URLSearchParams;
-  /** Intro overlay; null in ?poster / ?nointro mode. */
-  intro: IntroHandle | null;
   /** About panel; null in ?poster mode. */
   panels: PanelsHandle | null;
   /** True when only half the trails are drawn (phones). */

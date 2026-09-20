@@ -19,7 +19,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto(`${server.url}?nointro&t=00:00&paused${arg('query') ? `&${arg('query')}` : ''}`);
+  await page.goto(`${server.url}?place=all&t=00:00&paused${arg('query') ? `&${arg('query')}` : ''}`);
   await page.waitForFunction(() => window.circ?.tide && window.circ.store.stats.loaded === 24, null, { timeout: 60_000 });
   await page.waitForTimeout(1500);
   const res = await page.evaluate(async () => {

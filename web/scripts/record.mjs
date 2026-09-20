@@ -1,5 +1,6 @@
-// 15 s screen capture for the README: page load (poster -> live), the intro over
-// the already-playing morning rush, the rush itself, then a Midtown station click.
+// 15 s screen capture for the README: page load (poster -> live) on the default
+// filter (rides leaving Central Park) through the morning rush, a switch to the
+// rides arriving there, then a Midtown station click.
 // Playwright's recordVideo writes .webm natively (no ffmpeg needed).
 //
 //   npm run build && node scripts/record.mjs            # -> ../docs/circulation-15s.webm
@@ -34,9 +35,11 @@ try {
   await page.goto(server.url);
   await page.waitForFunction(() => window.circ?.clock?.playing === true, null, { timeout: 20_000 });
 
-  await at(4.2); // intro over the playing map
-  await page.mouse.move(W * 0.62, H * 0.45);
-  await page.mouse.wheel(0, 120); // "scroll to explore"
+  await at(5.5); // Central Park: leaving -> arriving
+  const arriving = page.locator('.fb-dir [data-dir="in"]');
+  const box = await arriving.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
+  await arriving.click();
 
   await at(10.5); // the 08:00-09:00 rush, then click a Midtown station
   const pt = await page.evaluate(() => {

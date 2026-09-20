@@ -1,25 +1,22 @@
-// Places and About panels and their entry buttons.
+// The About panel and its entry button (in the HUD's controls row, thumb
+// reach on phones).
 //
-// One panel slot: the selection panel (stations/selection.ts) and these
-// panels occupy the same place — top-right on desktop, a bottom
-// sheet just above the HUD on phones — and only one is ever open. Opening a
-// panel clears the selection; selecting a station or a place closes the panel.
-// The entry buttons live in the HUD's controls row (thumb reach on phones).
+// About shares the top-right slot (a bottom sheet just above the HUD on
+// phones) with the selection's details panel: while About is open the details
+// are hidden (html.about-open) but the filter stays as it is.
 
 import { COLORS } from '../config';
 import type { Manifest } from '../data/types';
-import { PLACES, placeById } from '../stations/places';
-import type { StationSelection } from '../stations/selection';
 import { formatDay } from './day';
 
-export type PanelId = 'places' | 'about';
+export type PanelId = 'about';
 
 export interface PanelsHandle {
   open(id: PanelId): void;
   close(): void;
   readonly current: PanelId | null;
-  /** Hook the station selection in once the tide layer is mounted. */
-  attachSelection(sel: StationSelection): void;
+  /** Called after a panel opens or closes. */
+  onChange(fn: () => void): void;
 }
 
 const CLOSE_SVG =
@@ -34,7 +31,6 @@ export function mountPanels(o: {
   const nav = document.createElement('div');
   nav.className = 'nav';
   nav.innerHTML = `
-    <button type="button" class="nav-btn" data-open="places" aria-expanded="false" aria-controls="panel" hidden>Places</button>
     <button type="button" class="nav-btn" data-open="about" aria-expanded="false" aria-controls="panel">About</button>`;
   o.navSlot.appendChild(nav);
 
@@ -46,25 +42,26 @@ export function mountPanels(o: {
   o.root.appendChild(panel);
 
   let current: PanelId | null = null;
-  let selection: StationSelection | null = null;
+  const listeners: (() => void)[] = [];
 
-  const syncButtons = () => {
+  const sync = () => {
     nav.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((b) => {
       const on = b.dataset.open === current;
       b.classList.toggle('on', on);
       b.setAttribute('aria-expanded', String(on));
     });
+    document.documentElement.classList.toggle('about-open', current === 'about');
+    listeners.forEach((fn) => fn());
   };
 
   function open(id: PanelId) {
     if (current === id) return close();
-    selection?.clear();
     current = id;
-    syncButtons();
     panel.className = `side-panel panel-${id}`;
     panel.hidden = false;
     panel.scrollTop = 0;
-    panel.innerHTML = frame(id === 'places' ? placesHtml(selection) : aboutHtml(o.manifest, o.isFixture));
+    panel.innerHTML = frame(aboutHtml(o.manifest, o.isFixture));
+    sync();
     panel.querySelector<HTMLElement>('.pn-close')?.focus({ preventScroll: true });
   }
 
@@ -74,7 +71,7 @@ export function mountPanels(o: {
     current = null;
     panel.hidden = true;
     panel.innerHTML = '';
-    syncButtons();
+    sync();
     nav.querySelector<HTMLElement>(`[data-open="${was}"]`)?.focus({ preventScroll: true });
   }
 
@@ -83,14 +80,18 @@ export function mountPanels(o: {
     if (b) open(b.dataset.open as PanelId);
   });
   panel.addEventListener('click', (e) => {
-    const el = e.target as HTMLElement;
-    if (el.closest('.pn-close')) return close();
-    const place = placeById(el.closest<HTMLElement>('[data-place]')?.dataset.place);
-    if (place) selection?.selectPlace(place);
+    if ((e.target as HTMLElement).closest('.pn-close')) close();
   });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && current) close();
-  });
+  // Capture, so Esc closes About first and doesn't also hide the details behind it.
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Escape' || !current) return;
+      e.stopImmediatePropagation();
+      close();
+    },
+    { capture: true },
+  );
 
   return {
     open,
@@ -98,13 +99,7 @@ export function mountPanels(o: {
     get current() {
       return current;
     },
-    attachSelection(sel) {
-      selection = sel;
-      nav.querySelector<HTMLElement>('[data-open="places"]')!.hidden = false;
-      sel.onChange((active) => {
-        if (active && current) close();
-      });
-    },
+    onChange: (fn) => void listeners.push(fn),
   };
 }
 
@@ -114,30 +109,16 @@ function frame(body: string): string {
 
 const rgb = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 
-function placesHtml(sel: StationSelection | null): string {
-  const items = PLACES.map((p) => {
-    const tot = sel?.placeTotals(p);
-    const count = tot ? `<span class="pl-count"><b>${tot.inbound.toLocaleString('en-US')}</b> rides end here</span>` : '';
-    return `<li><button type="button" data-place="${p.id}">
-      <span class="pl-name">${p.name}</span>${count}
-      <span class="pl-blurb">${p.blurb}${tot ? ` · ${tot.docks} docks` : ''}</span></button></li>`;
-  }).join('');
-  return `
-    <div class="pn-kicker">Places</div>
-    <h2 class="pn-title">Where are they going?</h2>
-    <p>Pick a place to see only the rides that end there. You can switch to the rides that start there, too.</p>
-    <ul class="pl-list">${items}</ul>`;
-}
-
 function aboutHtml(m: Manifest, isFixture: boolean): string {
   return `
     <div class="pn-kicker">About</div>
-    <h2 class="pn-title">Circulation</h2>
+    <h2 class="pn-title">Circulation: Citi Bike trips</h2>
     ${isFixture ? '<p class="ab-warn">You are looking at the <b>synthetic fixture</b>, not real trips.</p>' : ''}
-    <p>Every Citi Bike trip that started on ${formatDay(m.date)} — the busiest Tuesday, Wednesday or Thursday of June–August 2026 — replayed at 720×, a day in two minutes: ${m.totals.trips.toLocaleString('en-US')} trips.</p>
+    <p>Every Citi Bike trip that started on ${formatDay(m.date)} (${m.totals.trips.toLocaleString('en-US')} trips), the busiest Tuesday, Wednesday or Thursday of June–August 2026. At the default 720× a day plays in two minutes.</p>
+    <p>Use the bar at the top left to pick a place, or click any station dot, and choose rides <b>leaving</b> or <b>arriving</b>. The page opens on the rides leaving Central Park. Pick <b>All of New York City</b> to see every trip. The address bar keeps your choice, so you can share it.</p>
     <ul class="ab-key">
       <li><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike trip · <i style="--c:${rgb(COLORS.classic)}"></i>classic bike; casual riders drawn dimmer than members.</li>
-      <li><i class="dot" style="--c:var(--tide-sink)"></i>station filling up (more bikes arriving than leaving, per 15 min) · <i class="dot" style="--c:var(--tide-source)"></i>emptying out. Dot size = activity. Tap a station for where its riders go.</li>
+      <li><i class="dot" style="--c:var(--tide-sink)"></i>station filling up (more bikes arriving than leaving, per 15 min) · <i class="dot" style="--c:var(--tide-source)"></i>emptying out. Dot size = activity.</li>
     </ul>
     <h3>Estimated routes</h3>
     <p>Routes are <b>estimated</b>: Citi Bike publishes only start and end stations and times, not GPS traces. Each trail follows the OSRM bicycle shortest path between its two stations, with its real start and end times spread evenly along the path. Station positions are each station's median reported coordinates for the month. Trips under 60 s or over 3 h, round trips, and trips missing a station were dropped before encoding (about 2% of the day).</p>
@@ -146,9 +127,8 @@ function aboutHtml(m: Manifest, isFixture: boolean): string {
       <li>Trips: <a href="https://citibikenyc.com/system-data" target="_blank" rel="noopener">Citi Bike System Data</a> — Lyft / NYC Bike Share, used under the Citi Bike Data License Agreement.</li>
       <li>Routing: <a href="https://project-osrm.org" target="_blank" rel="noopener">OSRM</a> on <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL), Geofabrik New York extract.</li>
       <li>Basemap: <a href="https://carto.com/attributions" target="_blank" rel="noopener">© CARTO</a> Dark Matter, © OpenStreetMap contributors.</li>
-      <li>Areas: <a href="https://opendata.cityofnewyork.us" target="_blank" rel="noopener">NYC Open Data</a> — 2020 Neighborhood Tabulation Areas (for the headline).</li>
       <li>Rendering: deck.gl, MapLibre GL. Pipeline: Python, DuckDB, uv.</li>
     </ul>
     <h3>Controls</h3>
-    <p class="ab-keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> ±15 min · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> speed · drag the timeline to scrub · <kbd>Esc</kbd> close</p>`;
+    <p class="ab-keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> ±15 min · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> speed · drag the timeline to scrub · click a bar in the details to jump to that hour · <kbd>Esc</kbd> close a panel</p>`;
 }

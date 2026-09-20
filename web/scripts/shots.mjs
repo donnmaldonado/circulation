@@ -6,6 +6,8 @@
 //
 // Each shot opens a fresh page at ?t=HH:MM&paused (so the frame is exact), waits
 // for the live map, the tide dots and every chunk, runs its steps, then shoots.
+// With no ?place the page opens on its default filter (rides leaving Central
+// Park); the city-wide shots pass place=all.
 
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -32,13 +34,20 @@ async function clickStation(page, name) {
 }
 
 const SHOTS = [
-  { name: 'intro', query: 't=07:30&paused', keepIntro: true },
-  { name: 'morning', query: 't=07:50&paused' },
-  { name: 'peak-am', query: 't=08:30&paused' },
-  { name: 'peak-pm', query: 't=17:30&paused' },
-  { name: 'tide-0845', query: 't=08:45&paused' },
-  { name: 'tide-1800', query: 't=18:00&paused' },
-  { name: 'night', query: 't=23:10&paused' },
+  { name: 'default', query: 't=07:30&paused' },
+  { name: 'arriving-pm', query: 't=17:30&paused&dir=in' },
+  { name: 'penn-station', query: 't=08:30&paused&place=penn-station&dir=in' },
+  {
+    name: 'details',
+    query: 't=08:30&paused',
+    steps: async (page) => {
+      await page.click('.fb-details');
+      await page.waitForTimeout(300);
+    },
+  },
+  { name: 'peak-am', query: 't=08:30&paused&place=all' },
+  { name: 'peak-pm', query: 't=17:30&paused&place=all' },
+  { name: 'night', query: 't=23:10&paused&place=all' },
   {
     name: 'station',
     query: 't=08:40&paused',
@@ -93,10 +102,6 @@ try {
       { timeout: 30_000 },
     );
     await page.waitForTimeout(1200); // poster cross-fade + tide fade-in
-    if (!shot.keepIntro) {
-      await page.evaluate(() => window.circ.intro?.dismiss(true));
-      await page.waitForTimeout(600); // the brand line fades back in over 0.5 s
-    }
     if (shot.steps) await shot.steps(page);
     const path = `${OUT}/${MOBILE ? 'm-' : ''}${shot.name}.png`;
     await page.screenshot({ path });

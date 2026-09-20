@@ -1,11 +1,11 @@
 // Selection: a station (tide-dot click) or a place (a named set of docks, see
 // places.ts). Highlights the trips that leave it or arrive at it (all loaded
 // hours), dims everything else, rings its docks and the busiest docks at the
-// other end, and shows a panel with counts. A station opens on the rides
-// leaving it and a place on the rides ending there; the panel toggles between
-// the two. Rebuilds as more hour chunks are indexed, so an early click fills in.
-// Also owns the hover tooltip. Clear with the close button, Esc, or a click on
-// empty map.
+// other end, and shows a details panel (rides by hour, top docks at the other
+// end). The direction (rides leaving or arriving) is kept across selections,
+// so switching place or clicking a station keeps it. Rebuilds as more hour
+// chunks are indexed, so an early selection fills in. Also owns the hover
+// tooltip. Clear with Esc or the filter bar's "All of New York City".
 
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import { PathLayer, ScatterplotLayer } from '@deck.gl/layers';
@@ -57,6 +57,10 @@ export class StationSelection {
   private readonly tip: HTMLElement;
   private lastBin = -1;
   private hovered = -1;
+  /** Direction for the next selection; follows the last one made. */
+  private preferredDir: Dir;
+  /** Whether the details panel shows while something is selected. */
+  private detailsOpen: boolean;
   private readonly changeListeners = new Set<(active: boolean) => void>();
 
   constructor(
@@ -65,17 +69,19 @@ export class StationSelection {
     private readonly clock: Clock,
     private readonly requestRender: () => void,
     parent: HTMLElement,
+    opts: { dir: Dir; details: boolean },
   ) {
+    this.preferredDir = opts.dir;
+    this.detailsOpen = opts.details;
     this.panel = document.createElement('aside');
     this.panel.className = 'station-panel';
+    this.panel.id = 'details';
     this.panel.hidden = true;
     this.panel.setAttribute('aria-live', 'polite');
     parent.appendChild(this.panel);
     this.panel.addEventListener('click', (e) => {
       const el = e.target as HTMLElement;
-      if (el.closest('.sp-close')) return this.clear();
-      const dir = el.closest<HTMLElement>('[data-dir]');
-      if (dir) return this.setDir(dir.dataset.dir as Dir);
+      if (el.closest('.sp-close')) return this.showDetails(false);
       const hour = el.closest<HTMLElement>('[data-hour]');
       if (hour) return this.clock.seek(Number(hour.dataset.hour) * 3600);
       const li = el.closest<HTMLElement>('[data-station]');
@@ -97,11 +103,11 @@ export class StationSelection {
       if (this.sel) this.renderLive();
     });
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.sel) this.clear();
+      if (e.key === 'Escape' && this.sel) this.showDetails(false);
     });
   }
 
-  /** Called with true on select (and on direction change), false on clear. Returns an unsubscribe function. */
+  /** Called with whether something is selected, on every change: select, direction, rebuild as hours load, details shown/hidden, clear. Returns an unsubscribe function. */
   onChange(fn: (active: boolean) => void): () => void {
     this.changeListeners.add(fn);
     return () => this.changeListeners.delete(fn);
@@ -123,8 +129,26 @@ export class StationSelection {
     return t?.kind === 'place' ? t.place : null;
   }
 
-  get dir(): Dir | null {
-    return this.sel?.dir ?? null;
+  /** Direction of the selection, or the one the next selection will use. */
+  get dir(): Dir {
+    return this.sel?.dir ?? this.preferredDir;
+  }
+
+  /** Rides ending at / starting from the selection (loaded hours); zero when nothing is selected. */
+  get counts(): { inbound: number; outbound: number } {
+    return { inbound: this.sel?.inbound ?? 0, outbound: this.sel?.outbound ?? 0 };
+  }
+
+  get details(): boolean {
+    return this.detailsOpen;
+  }
+
+  /** Show or hide the details panel (the selection stays). */
+  showDetails(open: boolean): void {
+    if (open === this.detailsOpen) return;
+    this.detailsOpen = open;
+    this.panel.hidden = !(open && this.sel);
+    this.changeListeners.forEach((fn) => fn(this.active));
   }
 
   /** Opacity for the base trips layers. */
@@ -132,11 +156,10 @@ export class StationSelection {
     return this.sel ? DIMMED_TRIPS : 1;
   }
 
-  /** deck onClick handler: select a tide dot, or clear on empty map. */
+  /** deck onClick handler: select a tide dot. A click on empty map keeps the filter. */
   handleClick = (info: PickingInfo): void => {
     const s = pickedStation(info);
     if (s >= 0) this.select(s);
-    else if (this.sel) this.clear();
   };
 
   /** deck onHover handler: tooltip + pointer cursor. */
@@ -158,36 +181,25 @@ export class StationSelection {
     this.tip.style.transform = `translate(${Math.round(info.x)}px, ${Math.round(info.y)}px)`;
   };
 
-  /** Select a station; by default its outbound rides. */
-  select(s: number, dir: Dir = 'out'): void {
+  /** Select a station, keeping the current direction. */
+  select(s: number, dir: Dir = this.dir): void {
     if (s < 0 || s >= this.index.n) return;
     this.set({ kind: 'station', station: s }, dir);
   }
 
-  /** Select a place; by default the rides ending there. */
-  selectPlace(place: Place, dir: Dir = 'in'): void {
+  /** Select a place, keeping the current direction. */
+  selectPlace(place: Place, dir: Dir = this.dir): void {
     this.set({ kind: 'place', place }, dir);
   }
 
-  /** Switch the selection between rides leaving and rides arriving. */
+  /** Switch between rides leaving and rides arriving (also when nothing is selected yet). */
   setDir(dir: Dir): void {
-    if (this.sel && this.sel.dir !== dir) this.set(this.sel.target, dir);
-  }
-
-  /** Docks, rides in and rides out for a place (loaded hours), for the places list. */
-  placeTotals(place: Place): { docks: number; inbound: number; outbound: number } {
-    const members = placeStations(place, this.index);
-    const mask = this.mask(members);
-    let inbound = 0;
-    let outbound = 0;
-    for (const cs of this.index.chunks) {
-      if (!cs) continue;
-      for (let j = 0; j < cs.from.length; j++) {
-        if (cs.to[j] !== NO_STATION && mask[cs.to[j]]) inbound++;
-        if (cs.from[j] !== NO_STATION && mask[cs.from[j]]) outbound++;
-      }
+    if (this.sel) {
+      if (this.sel.dir !== dir) this.set(this.sel.target, dir);
+    } else if (this.preferredDir !== dir) {
+      this.preferredDir = dir;
+      this.changeListeners.forEach((fn) => fn(false));
     }
-    return { docks: members.length, inbound, outbound };
   }
 
   /** Time the last select() took (ms), for verification. */
@@ -272,6 +284,7 @@ export class StationSelection {
   private set(target: Target, dir: Dir): void {
     const t0 = performance.now();
     this.sel = this.build(target, dir);
+    this.preferredDir = dir;
     this.lastSelectMs = performance.now() - t0;
     this.renderPanel();
     this.requestRender();
@@ -427,22 +440,19 @@ export class StationSelection {
     const peak = sel.hourly.indexOf(Math.max(...sel.hourly));
     const inside = place ? place.name : 'this dock';
     this.panel.innerHTML = `
-      <button class="sp-close" type="button" aria-label="Close details">
+      <button class="sp-close" type="button" aria-label="Hide details">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <div class="sp-kicker">${place ? 'Place' : 'Station'}</div>
       <h2 class="sp-name">${esc(name)}</h2>
       ${place ? `<div class="sp-blurb">${esc(place.blurb)} · ${sel.members.length} docks</div>` : '<div class="sp-flow"></div>'}
-      <div class="sp-dir" role="radiogroup" aria-label="Which rides">
-        <button type="button" role="radio" data-dir="in" aria-checked="${!out}" class="${out ? '' : 'on'}">Ending here <b>${n(sel.inbound)}</b></button>
-        <button type="button" role="radio" data-dir="out" aria-checked="${out}" class="${out ? 'on' : ''}">Starting here <b>${n(sel.outbound)}</b></button>
-      </div>
+      <div class="sp-total"><b>${n(out ? sel.outbound : sel.inbound)}</b> rides ${out ? 'leaving' : 'arriving'}</div>
       <h3>${out ? 'Leaving' : 'Arriving'} by hour${sel.inbound + sel.outbound ? ` <span class="sp-peak">peak ${formatClock(peak * 3600)}</span>` : ''}</h3>
       <div class="sp-hours" style="--now:${this.clock.hour}">${bars}</div>
       <h3>${out ? 'Top destinations' : 'Top origins'}</h3>
       <ol class="sp-dests">${dests}</ol>
       ${place && sel.internal ? `<div class="sp-note">${n(sel.internal)} of these rides ${out ? 'end' : 'start'} at ${esc(inside)} too.</div>` : ''}
       ${hours < 24 ? `<div class="sp-note">Counting… ${hours}/24 hours loaded</div>` : ''}`;
-    this.panel.hidden = false;
+    this.panel.hidden = !this.detailsOpen;
     this.renderLive();
   }
 
