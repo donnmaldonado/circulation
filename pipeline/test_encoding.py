@@ -11,14 +11,17 @@ on the contract layout) and checks:
     time within 1 s, first/last time within 1 s of real started_at/ended_at, and
     first/last vertex within 2 m of the station coords;
   * manifest contract fields, stations.json (coords identical to trip endpoints,
-    tide recomputed), and the Budget.
+    tide recomputed), and the Budget (total <= 25 MB; hours 07-09, hours 00-02 and the
+    worst 3 consecutive hours, each + manifest, <= 5 MB).
 Exits non-zero on any failure.
 
-Run: cd pipeline && uv run python test_encoding.py
+Run: cd pipeline && uv run python test_encoding.py [--date YYYY-MM-DD]
+  --date also checks that manifest.json and out/day.json are that day.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import sys
@@ -75,6 +78,9 @@ KX = 111_412.84 * math.cos(math.radians(LAT0)) - 93.5 * math.cos(3 * math.radian
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--date", default=None, help="YYYY-MM-DD the encoded data must be for")
+    args = ap.parse_args()
     manifest = json.loads((DATA / "manifest.json").read_text())
     msize = (DATA / "manifest.json").stat().st_size
     minx, miny, maxx, maxy = manifest["bbox"]
@@ -87,6 +93,12 @@ def main() -> int:
     order = pd.read_parquet(OUT / "encoded_order.parquet")
 
     # ---- manifest contract
+    day_json = json.loads((OUT / "day.json").read_text())
+    check(day_json["date"] == date, f"out/day.json date {day_json['date']} != manifest {date}")
+    if args.date:
+        check(date == args.date, f"manifest.date {date} != --date {args.date}")
+    check(isinstance(manifest.get("generated_at"), str) and manifest["generated_at"].endswith("Z"),
+          "manifest.generated_at")
     check(manifest["chunks"] == [f"trips-{h:02d}.bin" for h in range(24)], "manifest.chunks")
     check(len(manifest["histogram"]) == 288, "histogram length")
     hist = np.bincount(((day.started_at - midnight).dt.total_seconds() // 300).astype(int), minlength=288)
@@ -132,15 +144,17 @@ def main() -> int:
     total = sum(sizes.values())
     first3 = sum(sizes[h] for h in (7, 8, 9)) + msize
     first3_00 = sum(sizes[h] for h in (0, 1, 2)) + msize
+    worst3 = max(sum(sizes[(h + k) % 24] for k in range(3)) for h in range(24)) + msize
     check(total <= BUDGET_TOTAL, f"budget: total {total} > {BUDGET_TOTAL}")
     check(first3 <= BUDGET_FIRST3, f"budget: hours 07-09 + manifest {first3} > {BUDGET_FIRST3}")
     check(first3_00 <= BUDGET_FIRST3, f"budget: hours 00-02 + manifest {first3_00} > {BUDGET_FIRST3}")
+    check(worst3 <= BUDGET_FIRST3, f"budget: worst 3 consecutive hours + manifest {worst3} > {BUDGET_FIRST3}")
 
     # ---- 1,000 random trips vs reference
     routes = con.sql(f"select start_station_id, end_station_id, polyline from '{OUT / 'routes.parquet'}'").df()
     routes = routes.set_index(["start_station_id", "end_station_id"]).polyline
     rng = np.random.default_rng(SEED)
-    pick = order.iloc[rng.choice(len(order), N_SAMPLE, replace=False)]
+    pick = order.iloc[rng.choice(len(order), min(N_SAMPLE, len(order)), replace=False)]
     max_d = max_dt = max_end_d = max_t0 = max_t1 = 0.0
     nvert = 0
     for row in pick.itertuples():
@@ -212,7 +226,7 @@ def main() -> int:
     print()
     print(f"files: 24 chunks, {total_trips:,} trips, {sum(c['nv'] for c in chunks.values()):,} vertices")
     print(f"budget: total {total / 1e6:.2f} MB (<= 25), 07-09+manifest {first3 / 1e6:.2f} MB, "
-          f"00-02+manifest {first3_00 / 1e6:.2f} MB (<= 5)")
+          f"00-02+manifest {first3_00 / 1e6:.2f} MB, worst 3h+manifest {worst3 / 1e6:.2f} MB (<= 5)")
     print(f"sample: {N_SAMPLE} trips, {nvert:,} vertices; max vertex error {max_d:.3f} m, "
           f"max time error {max_dt:.3f} s, max endpoint-to-station {max_end_d:.3f} m, "
           f"max |t_first - started_at| {max_t0:.3f} s, max |t_last - ended_at| {max_t1:.3f} s")

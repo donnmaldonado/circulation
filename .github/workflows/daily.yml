@@ -1,0 +1,288 @@
+# Circulation, daily: rebuild the site for "today, one year ago" and deploy it
+# to GitHub Pages.
+#
+# Runs every night just after midnight in New York, on demand (optionally for a
+# given day), and on pushes to main that touch the site or the pipeline. A run
+# that fails deploys nothing, so the previous day's site stays live; GitHub
+# emails the failure to whoever last edited the schedule (the default
+# notification for failed scheduled runs).
+name: daily
+
+on:
+  schedule:
+    # 05:17 UTC = 01:17 in New York in summer (EDT, UTC-4) and 00:17 in winter
+    # (EST, UTC-5): after midnight either way, so "today in New York" is the
+    # same day as the UTC date. :17 dodges the top-of-the-hour queue.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Day to build (YYYY-MM-DD). Empty = today in New York, one year ago."
+        required: false
+        default: ""
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "pipeline/**"
+      - ".github/workflows/daily.yml"
+      - ".github/scripts/**"
+
+permissions:
+  contents: read
+
+# One run at a time; a newer run waits for the current one rather than
+# cancelling it halfway through a deploy.
+concurrency:
+  group: circulation-daily
+  cancel-in-progress: false
+
+env:
+  OSRM_URL: http://localhost:5055
+  OSRM_IMAGE: ghcr.io/project-osrm/osrm-backend:v6.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      date: ${{ steps.day.outputs.date }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pick the day
+        id: day
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -o pipefail  # the default shell is bash -e: without this, tee hides a bad date input
+          python3 .github/scripts/target-day.py "$INPUT_DATE" | tee -a "$GITHUB_OUTPUT"
+          echo "run_month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+      - name: Make room on disk
+        # The trip zips can be large (a yearly bundle is several GB), so put
+        # the ingest scratch dir on the runner's big temp disk when there is
+        # one, and drop preinstalled toolchains we never use if / is tight.
+        run: |
+          df -h / /mnt 2>/dev/null || df -h /
+          if [ -d /mnt ] && sudo mkdir -p /mnt/circulation-raw 2>/dev/null; then
+            sudo chown "$(id -u):$(id -g)" /mnt/circulation-raw
+            mkdir -p pipeline/data
+            ln -sfn /mnt/circulation-raw pipeline/data/raw_a
+            echo "ingest scratch -> /mnt/circulation-raw"
+          fi
+          free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
+          if [ "$free_gb" -lt 25 ]; then
+            echo "only ${free_gb} GB free on /; removing unused toolchains"
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+            df -h /
+          fi
+
+      - uses: astral-sh/setup-uv@v10.2.0  # setup-uv has no floating major tag; @v10 does not resolve
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: pipeline/uv.lock
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install osmium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+
+      # --- caches -----------------------------------------------------------
+      # OSRM graph (+ the clipped NYC extract, which b_osrm.sh checks first):
+      # rebuilt from a fresh Geofabrik download once a month.
+      - name: Restore OSRM graph
+        id: osrm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: pipeline/osm
+          key: osrm-v6.0.0-${{ steps.day.outputs.run_month }}
+
+      # Route cache: grows every run, so each run saves it under a new key and
+      # the next run restores the newest one. Saved even if a later step fails.
+      - name: Restore route cache
+        id: routes-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: pipeline/out/routes_cache.duckdb*
+          key: routes-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: routes-v1-
+
+      # Monthly trip parquets, keyed on the months around the day. On a miss,
+      # the newest set is restored (usually the month before, which the day
+      # may still need); what is not needed is pruned before saving.
+      - name: Restore trip months
+        id: trips-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: pipeline/data/trips
+          key: trips-v1-${{ steps.day.outputs.months }}
+          restore-keys: trips-v1-
+
+      - name: Restore NTA areas
+        id: nta-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: pipeline/data/c/nta2020.geojson
+          key: nta2020-v1
+
+      # --- pipeline ---------------------------------------------------------
+      - name: Build and start OSRM
+        working-directory: pipeline
+        run: |
+          ./b_osrm.sh   # OSRM_THREADS defaults to the CPU count
+          df -h /
+
+      - name: Save OSRM graph
+        if: steps.osrm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: pipeline/osm
+          key: osrm-v6.0.0-${{ steps.day.outputs.run_month }}
+
+      - name: Build the day (${{ steps.day.outputs.date }})
+        id: daily
+        working-directory: pipeline
+        env:
+          DAY: ${{ steps.day.outputs.date }}
+        run: |
+          uv run python daily.py --date "$DAY"
+          df -h /
+
+      - name: Check the output is the day asked for
+        env:
+          DAY: ${{ steps.day.outputs.date }}
+        run: |
+          got=$(jq -r .date web/public/data/manifest.json)
+          day_json=$(jq -r .date pipeline/out/day.json)
+          echo "manifest.json: $got, day.json: $day_json, wanted: $DAY"
+          if [ "$got" != "$DAY" ] || [ "$day_json" != "$DAY" ]; then
+            echo "::error::built $got / $day_json, not $DAY"; exit 1
+          fi
+          ls -la web/public/data
+          {
+            echo "### $(jq -r '"\(.weekday) \(.date)"' pipeline/out/day.json)"
+            jq -r '"\(.clean_trips) clean trips (\(.raw_trips) raw)"' pipeline/out/day.json
+            echo
+            echo "Data: $(du -sh web/public/data | cut -f1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save route cache
+        if: always() && steps.daily.outcome != 'skipped' && hashFiles('pipeline/out/routes_cache.duckdb') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: pipeline/out/routes_cache.duckdb*
+          key: routes-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Prune trip months not around the day
+        if: always() && steps.trips-cache.outputs.cache-hit != 'true' && steps.daily.outcome != 'skipped'
+        env:
+          MONTHS: ${{ steps.day.outputs.months }}
+        run: |
+          shopt -s nullglob
+          for f in pipeline/data/trips/*.parquet; do
+            m=$(basename "$f" .parquet)
+            case "_${MONTHS}_" in *"_${m}_"*) ;; *) echo "pruning $f"; rm -f "$f" ;; esac
+          done
+          ls -la pipeline/data/trips || true
+
+      # Parquets are written to .part and renamed, so any that exist are whole.
+      - name: Save trip months
+        if: always() && steps.trips-cache.outputs.cache-hit != 'true' && hashFiles('pipeline/data/trips/*.parquet') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: pipeline/data/trips
+          key: trips-v1-${{ steps.day.outputs.months }}
+
+      - name: Save NTA areas
+        if: always() && steps.nta-cache.outputs.cache-hit != 'true' && hashFiles('pipeline/data/c/nta2020.geojson') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: pipeline/data/c/nta2020.geojson
+          key: nta2020-v1
+
+      - name: Keep day.json for the history record
+        uses: actions/upload-artifact@v7
+        with:
+          name: day-json
+          path: pipeline/out/day.json
+          retention-days: 7
+
+      # --- site -------------------------------------------------------------
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Poster frame
+        # Never ship a poster of a different day: if it cannot be regenerated,
+        # drop it and the page opens on the dark background until the reveal.
+        working-directory: web
+        run: |
+          if npx playwright install --with-deps chromium && timeout 15m npm run poster; then
+            ls -la public/poster.webp public/poster-lqip.txt
+          else
+            echo "::warning::poster failed; building without a poster frame"
+            rm -f public/poster.webp public/poster-lqip.txt
+          fi
+
+      - name: Build site
+        working-directory: web
+        run: |
+          npm run build
+          du -sh dist
+          test -f dist/data/manifest.json
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  # A small daily commit keeps the repo "active": GitHub disables scheduled
+  # workflows in public repos after 60 days without repository activity.
+  record:
+    needs: [build, deploy]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: day-json
+          path: ${{ runner.temp }}/day
+
+      - name: Commit history/${{ needs.build.outputs.date }}.json
+        env:
+          BRANCH: main
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: bash .github/scripts/record-day.sh "$RUNNER_TEMP/day/day.json" "$PAGE_URL"

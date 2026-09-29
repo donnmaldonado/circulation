@@ -8,6 +8,10 @@
 # Image: the Docker Hub tag osrm/osrm-backend:latest is a 2021 amd64-only build;
 # the same project publishes multi-arch (native arm64) images on GHCR.
 # Host port: 5000 is taken by macOS AirPlay Receiver, so we map to 5055.
+# Runs on macOS (Docker Desktop, osmium from Homebrew) and Linux (e.g. a GitHub ubuntu runner:
+# Docker + `apt-get install osmium-tool`). On Linux the containers run as the calling user so
+# the build files stay owned by it (cacheable, deletable).
+# Env: OSRM_THREADS (default: CPU count), OSRM_PORT (5055), OSRM_IMAGE, OSRM_CONTAINER.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -20,6 +24,13 @@ STATE_URL="https://download.geofabrik.de/north-america/us/new-york-latest.osm.pb
 STATE_PBF="$OSM_DIR/new-york-latest.osm.pbf"
 NYC_PBF="$OSM_DIR/nyc.osm.pbf"
 BUILD="$OSM_DIR/build"              # OSRM files live here: build/nyc.osrm*
+if [[ -z "${OSRM_THREADS:-}" ]]; then
+  OSRM_THREADS="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+fi
+DOCKER_USER=()
+if [[ "$(uname -s)" == "Linux" ]]; then
+  DOCKER_USER=(--user "$(id -u):$(id -g)")
+fi
 
 mkdir -p "$OSM_DIR" "$BUILD"
 log() { echo "[b_osrm $(date +%H:%M:%S)] $*"; }
@@ -30,9 +41,9 @@ start_container() {
     docker rm -f "$CONTAINER" >/dev/null
   fi
   log "starting $CONTAINER on localhost:$PORT"
-  docker run -d --name "$CONTAINER" --restart unless-stopped \
+  docker run -d --name "$CONTAINER" --restart unless-stopped ${DOCKER_USER[@]+"${DOCKER_USER[@]}"} \
     -p "$PORT:5000" -v "$BUILD:/data" "$IMAGE" \
-    osrm-routed --algorithm mld --threads 8 /data/nyc.osrm >/dev/null
+    osrm-routed --algorithm mld --threads "$OSRM_THREADS" /data/nyc.osrm >/dev/null
   for i in $(seq 1 60); do
     if curl -sf "http://localhost:$PORT/route/v1/bike/-73.9857,40.7484;-73.9772,40.7527?overview=false" >/dev/null; then
       log "OSRM is up: http://localhost:$PORT"; return 0
@@ -64,12 +75,13 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE"
 if [[ ! -s "$BUILD/nyc.osrm.mldgr" ]]; then
   cp "$NYC_PBF" "$BUILD/nyc.osm.pbf"
   t0=$(date +%s)
-  log "osrm-extract (bicycle)"
-  docker run --rm -v "$BUILD:/data" "$IMAGE" osrm-extract -p /opt/bicycle.lua /data/nyc.osm.pbf
+  run=(docker run --rm ${DOCKER_USER[@]+"${DOCKER_USER[@]}"} -v "$BUILD:/data" "$IMAGE")
+  log "osrm-extract (bicycle, $OSRM_THREADS threads)"
+  "${run[@]}" osrm-extract -t "$OSRM_THREADS" -p /opt/bicycle.lua /data/nyc.osm.pbf
   log "osrm-partition"
-  docker run --rm -v "$BUILD:/data" "$IMAGE" osrm-partition /data/nyc.osrm
+  "${run[@]}" osrm-partition -t "$OSRM_THREADS" /data/nyc.osrm
   log "osrm-customize"
-  docker run --rm -v "$BUILD:/data" "$IMAGE" osrm-customize /data/nyc.osrm
+  "${run[@]}" osrm-customize -t "$OSRM_THREADS" /data/nyc.osrm
   rm -f "$BUILD/nyc.osm.pbf"
   log "build done in $(( $(date +%s) - t0 ))s"
 fi

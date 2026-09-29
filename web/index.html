@@ -4,12 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Circulation · Citi Bike trip explorer</title>
-    <meta name="description" content="Every Citi Bike trip of one New York weekday: pick a place and see where its riders go." />
+    <meta name="description" content="Every Citi Bike trip in New York on this day one year ago, rebuilt every night: pick a place and see where its riders go." />
     <meta name="theme-color" content="#050608" />
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23050608'/%3E%3Cpath d='M3 11 L7 7 L9 9 L13 4' stroke='%2340D8FF' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
     <!-- Poster first: it is the first paint, before any script runs. -->
-    <link rel="preload" as="image" href="./poster.webp" type="image/webp" fetchpriority="high" />
+    %POSTER_PRELOAD%
     <!-- Data on the critical path (manifest + the hours on screen at the opening moment), fetched in parallel with the JS. -->
     %DATA_PRELOADS%
     <!-- Basemap critical path: style -> tiles.json -> tiles on 4 shards. Warm them all. -->
@@ -28,13 +28,14 @@
       #poster > div { position: absolute; inset: 0; background-position: center; background-size: cover;
         background-repeat: no-repeat; }
       #poster .lqip { background-image: %POSTER_LQIP%; filter: blur(14px); transform: scale(1.04); }
-      #poster .full { background-image: url(./poster.webp); }
+      #poster .full { background-image: %POSTER_FULL%; }
       .live #poster { opacity: 0; }
       .poster-mode #poster { transition: none; }
       .bar { position: fixed; top: 16px; left: 16px; z-index: 11; max-width: calc(100vw - 32px);
         font: 400 12.5px/1.35 ui-sans-serif, -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif; }
       .bar-title { margin: 0 0 8px 2px; color: #8b93a3; text-shadow: 0 1px 8px #000; }
       .bar-title b { font-weight: 600; color: #eef1f6; }
+      [data-brand-date] { white-space: nowrap; }
       .fixture-badge { display: none; margin-left: 8px; padding: 1px 6px; border: 1px solid #3a3f4a; border-radius: 4px;
         font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9aa3b5; }
       .is-fixture .fixture-badge { display: inline-block; }
@@ -46,7 +47,7 @@
       <div id="map" aria-label="Map of Citi Bike trips"></div>
       <div id="poster" aria-hidden="true"><div class="lqip"></div><div class="full"></div></div>
       <header class="bar">
-        <p class="bar-title"><b>Citi Bike trips</b> · <span data-brand-date>%BRAND_DATE%</span><span class="fixture-badge">synthetic fixture</span></p>
+        <p class="bar-title"><b>Citi Bike trips</b> · <span data-brand-ago>%BRAND_AGO%</span><span data-brand-date>%BRAND_DATE%</span><span class="fixture-badge">synthetic fixture</span></p>
         <div class="bar-controls" data-slot="filter"></div>
       </header>
     </div>

@@ -1,8 +1,8 @@
 # data & caches
 pipeline/data/
 pipeline/osm/
-pipeline/out/*.parquet
-pipeline/out/*.duckdb
+# per-day outputs of pipeline/daily.py (history/ keeps a small record of each deployed day)
+pipeline/out/
 pipeline/.venv/
 .venv/
 __pycache__/
@@ -10,7 +10,8 @@ __pycache__/
 # web
 web/node_modules/
 web/dist/
+# generated daily by pipeline/daily.py (CI builds it fresh; not committed)
+web/public/data/
 .DS_Store
 # stress fixture from make_fixture.py --out ../web/public/fixture-dense
 web/public/fixture-dense/
-pipeline/out/routes_cache.duckdb*

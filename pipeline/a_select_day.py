@@ -1,68 +1,54 @@
-"""Workstream A, step 2: pick the day, clean its trips, and write the day's outputs.
+"""Workstream A, step 2: clean one day's trips and write the day's outputs.
 
-Usage:  cd pipeline && uv run python a_select_day.py
-Needs:  data/trips/2026-06..08.parquet (from a_ingest.py)
+Usage:  cd pipeline && uv run python a_select_day.py [--date YYYY-MM-DD]
+        (default: today in New York minus one year)
+Needs:  data/trips/YYYY-MM.parquet for D's month (from a_ingest.py), plus the next month's file
+        if D is the last day of its month and that file exists. Monthly files are split by END
+        time, so the next month's file holds the trips that start on D and end after midnight.
 
-Day rule: the Tue/Wed/Thu in Jun-Aug 2026 with the most raw trips, counted by the calendar
-date of `started_at` (NYC local time, as given in the CSVs), before any cleaning.
-Monthly files are split by end time, so all three months are unioned before counting.
-August 2026 is the newest month published; September's file would complete Aug 31, a Monday.
+The day's trips are those whose `started_at` falls on D (NYC local time, as given in the CSVs).
 
 Cleaning (each dropped trip is attributed to the first rule it fails, in this order):
   short        duration < 60 s (includes negative durations)
   long         duration > 3 h
   null_station start or end station id is null
   round_trip   start station id == end station id
-Coordinates are snapped to each station's median lat/lng over the chosen day's calendar month
-(start and end appearances pooled); station name is the most common name seen for that id.
+Coordinates are snapped to each station's median lat/lng over D's calendar month (start and end
+appearances pooled, trips that start in the month); station name is the most common name seen.
 
-Outputs (pipeline/out/): day.parquet, stations.parquet, pairs.parquet, day.json,
-daily_counts_2026_summer.csv
+Outputs (pipeline/out/): day.parquet, stations.parquet, pairs.parquet, day.json
 """
 
+import argparse
 import json
-from pathlib import Path
 
-import duckdb
+from common import OUT, add_date_arg, default_date, duckdb_connect, months_for_day, parquet_path
 
-HERE = Path(__file__).parent
-TRIPS_GLOB = str(HERE / "data" / "trips" / "2026-0[6-8].parquet")
-OUT = HERE / "out"
-MONTHS = ["2026-06", "2026-07", "2026-08"]
 MIN_S, MAX_S = 60, 3 * 3600
 WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 
 def main() -> None:
-    OUT.mkdir(exist_ok=True)
-    con = duckdb.connect()
-    con.execute("SET memory_limit='6GB'; SET threads=6;")
-    con.execute(f"CREATE VIEW all_trips AS SELECT * FROM read_parquet('{TRIPS_GLOB}')")
-
-    # --- daily raw counts, Jun 1 - Aug 31 by started_at date -------------------------------
-    con.execute(
-        """
-        CREATE TABLE daily AS
-        SELECT CAST(started_at AS DATE) AS date, dayofweek(started_at) AS dow, count(*) AS trips
-        FROM all_trips
-        WHERE started_at >= DATE '2026-06-01' AND started_at < DATE '2026-09-01'
-        GROUP BY ALL ORDER BY date
-        """
-    )
-    daily = con.execute("SELECT date, dow, trips FROM daily ORDER BY date").fetchall()
-    with open(OUT / "daily_counts_2026_summer.csv", "w") as f:
-        f.write("date,weekday,trips\n")
-        for d, dow, n in daily:
-            f.write(f"{d},{WEEKDAYS[dow]},{n}\n")
-
-    top5 = con.execute(
-        "SELECT date, dow, trips FROM daily WHERE dow IN (2,3,4) ORDER BY trips DESC, date LIMIT 5"
-    ).fetchall()
-    day, dow, raw_trips = top5[0]
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_date_arg(ap)
+    day = ap.parse_args().date or default_date()
+    months = months_for_day(day)
+    if not parquet_path(months[0]).exists():
+        raise SystemExit(f"missing {parquet_path(months[0])}; run a_ingest.py --date {day} first")
+    source_months = [m for m in months if parquet_path(m).exists()]
+    files = [str(parquet_path(m)) for m in source_months]
     month_start = day.replace(day=1)
-    print(f"Chosen day: {day} ({WEEKDAYS[dow]}), raw trips = {raw_trips:,}")
-    for d, w, n in top5:
-        print(f"  candidate {d} {WEEKDAYS[w]:<9} {n:,}")
+
+    OUT.mkdir(exist_ok=True)
+    con = duckdb_connect()
+    con.execute(f"CREATE VIEW all_trips AS SELECT * FROM read_parquet({files!r})")
+    raw_trips = con.execute(
+        f"SELECT count(*) FROM all_trips WHERE CAST(started_at AS DATE) = DATE '{day}'"
+    ).fetchone()[0]
+    if raw_trips == 0:
+        raise SystemExit(f"no trips start on {day} in {source_months}")
+    dow = (day.isoweekday() % 7)  # 0 = Sunday, as duckdb's dayofweek
+    print(f"Day: {day} ({WEEKDAYS[dow]}), raw trips = {raw_trips:,}, from {source_months}")
 
     # --- station medians over the chosen day's calendar month --------------------------------
     con.execute(
@@ -166,13 +152,13 @@ def main() -> None:
         "date": str(day),
         "weekday": WEEKDAYS[dow],
         "raw_trips": raw_trips,
-        "raw_trips_note": "trips with started_at on this date (NYC local), before cleaning; "
-        "day chosen by this raw count",
+        "raw_trips_note": "trips with started_at on this date (NYC local), before cleaning",
         "clean_trips": clean_trips,
         "dropped": dropped,
         "dropped_note": "each trip counted once, under the first rule it fails in the order listed",
-        "candidate_top5": [{"date": str(d), "weekday": WEEKDAYS[w], "trips": n} for d, w, n in top5],
-        "months_used": MONTHS,
+        "source_months": source_months,
+        "source_months_note": "Citi Bike monthly files read (split by end time); the next month is "
+        "included only when the day is the last of its month",
         "station_coords_month": str(month_start)[:7],
         "unique_pairs": unique_pairs,
         "stations": n_stations,

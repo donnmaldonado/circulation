@@ -13,7 +13,7 @@ import { mountFilter } from './ui/filter';
 import { startFpsMeter } from './ui/fps';
 import { mountPanels } from './ui/panels';
 import { revealLive } from './ui/poster';
-import { formatDay } from './ui/day';
+import { agoPrefix, formatDay } from './ui/day';
 import { mountScrubber } from './ui/scrubber';
 import type { App } from './app';
 
@@ -35,8 +35,11 @@ async function boot(): Promise<App> {
   const { map, overlay, basemapReady } = createMap(mapEl);
   const source = await resolveDataSource(params);
   mark('manifest');
-  // The title line names the day; inlined at build time, refilled here for whichever manifest loaded.
+  // The title line names the day; inlined at build time, refilled here for whichever manifest loaded
+  // and for today's date ("One year ago today" only while that is still true in New York).
+  const brandAgo = document.querySelector('[data-brand-ago]');
   const brandDate = document.querySelector('[data-brand-date]');
+  if (brandAgo) brandAgo.textContent = source.isFixture ? '' : agoPrefix(source.manifest.date);
   if (brandDate) brandDate.textContent = formatDay(source.manifest.date);
   const stationsReady = loadStations(source).catch((err) => {
     console.error('[circulation] stations.json failed; tide layer off', err);
@@ -114,7 +117,8 @@ async function boot(): Promise<App> {
   mark('first-chunk');
   // Wait for the basemap, but never past REVEAL_DEADLINE_MS after navigation: late tiles
   // fill in under the poster's cross-fade; a late start would miss the reviewer's glance.
-  await Promise.race([basemapReady, delay(POSTER_MODE ? 15000 : Math.max(0, REVEAL_DEADLINE_MS - performance.now()))]);
+  // The poster itself waits up to a minute (software GL on the nightly CI runner is slow).
+  await Promise.race([basemapReady, delay(POSTER_MODE ? 60000 : Math.max(0, REVEAL_DEADLINE_MS - performance.now()))]);
   mark('basemap');
   scene.render();
   await nextDeckFrame(scene);

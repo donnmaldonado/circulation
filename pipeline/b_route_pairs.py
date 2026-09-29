@@ -10,12 +10,14 @@ routes pairs that are missing (transient HTTP errors are not cached, so they are
 Fallback rules are applied at assembly time, so changing them never needs a re-route.
 
 Usage: uv run python b_route_pairs.py [--pairs P] [--out O] [--osrm URL] [--concurrency N]
+Env:   OSRM_URL (default http://localhost:5055), ROUTE_CONCURRENCY (default 24 parallel requests)
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,7 +31,8 @@ import requests
 from tqdm import tqdm
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_OSRM = os.environ.get("OSRM_URL", "http://localhost:5055")
+DEFAULT_OSRM = os.environ.get("OSRM_URL") or "http://localhost:5055"
+DEFAULT_CONCURRENCY = int(os.environ.get("ROUTE_CONCURRENCY") or 24)
 
 DETOUR_RATIO = 4.0  # route > 4x straight line ...
 DETOUR_MIN_M = 2000.0  # ... and > 2 km  => absurd detour
@@ -178,7 +181,7 @@ def main() -> None:
     ap.add_argument("--fallbacks", type=Path, default=None, help="default: <out dir>/route_fallbacks.csv")
     ap.add_argument("--cache", type=Path, default=None, help="default: <out dir>/<out stem>_cache.duckdb")
     ap.add_argument("--osrm", default=DEFAULT_OSRM)
-    ap.add_argument("--concurrency", type=int, default=24)
+    ap.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
     ap.add_argument("--flush-every", type=int, default=5000)
     args = ap.parse_args()
 
@@ -196,7 +199,8 @@ def main() -> None:
     try:
         requests.get(f"{args.osrm}/route/v1/bike/-73.9857,40.7484;-73.9772,40.7527", timeout=5).raise_for_status()
     except requests.RequestException as e:
-        raise SystemExit(f"OSRM not reachable at {args.osrm} ({e}). Run ./b_osrm.sh (or ./b_osrm.sh restart).")
+        raise SystemExit(f"OSRM not reachable at {args.osrm} ({e}). Start it with ./b_osrm.sh "
+                         "(or ./b_osrm.sh restart), or set OSRM_URL.")
 
     con = open_cache(cache_path)
     con.register("pairs", pairs)
@@ -212,7 +216,8 @@ def main() -> None:
         buf: list[dict] = []
         with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
             futs = [ex.submit(route_one, args.osrm, row) for row in todo]
-            for f in tqdm(as_completed(futs), total=len(futs), unit="pair", mininterval=2):
+            for f in tqdm(as_completed(futs), total=len(futs), unit="pair",
+                          mininterval=2 if sys.stderr.isatty() else 30):
                 rec = f.result()
                 if rec["status"] == "error":
                     n_err += 1  # transient: don't cache, retried on next run

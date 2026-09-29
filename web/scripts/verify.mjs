@@ -39,6 +39,7 @@ try {
   report.posterVisibleAt50ms = await page.evaluate(() => {
     const el = document.querySelector('#poster .full');
     if (!el) return 'no poster element';
+    if (getComputedStyle(el).backgroundImage === 'none') return 'no poster (built without poster.webp)';
     const img = new Image();
     img.src = './poster.webp';
     return img.complete ? 'poster decoded' : 'poster still loading';

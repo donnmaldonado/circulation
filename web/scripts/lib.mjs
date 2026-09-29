@@ -29,19 +29,26 @@ export async function startServer(mode = 'dev') {
 }
 
 /**
- * Chromium with hardware GL. `headed` uses a real window (most honest fps);
- * otherwise the full Chromium build in new-headless mode, which can still use
- * the GPU via ANGLE/Metal (the default headless shell falls back to SwiftShader).
+ * Chromium with hardware GL where there is a GPU. `headed` uses a real window
+ * (most honest fps); otherwise the full Chromium build in new-headless mode,
+ * which on macOS can still use the GPU via ANGLE/Metal. Headless Linux (the
+ * nightly GitHub Action) has no GPU, so WebGL runs on SwiftShader through
+ * ANGLE: slow but correct, fine for one poster frame. CIRC_GL=metal|swiftshader
+ * overrides the choice by platform.
  */
+export const GL = process.env.CIRC_GL || (process.platform === 'darwin' ? 'metal' : 'swiftshader');
+
 export async function launch({ headed = false } = {}) {
+  const gl =
+    GL === 'swiftshader'
+      ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+      : [`--use-angle=${GL}`, '--enable-gpu', '--enable-gpu-rasterization'];
   return chromium.launch({
     headless: !headed,
     channel: headed ? undefined : 'chromium',
     args: [
-      '--use-angle=metal',
-      '--enable-gpu',
+      ...gl,
       '--ignore-gpu-blocklist',
-      '--enable-gpu-rasterization',
       '--disable-renderer-backgrounding',
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',

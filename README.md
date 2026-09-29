@@ -1,8 +1,8 @@
 # Circulation
 
-**A trip explorer for one real weekday of Citi Bike in New York. Pick a place or a station and see where its riders go, or where they come from.**
+**A trip explorer for Citi Bike in New York on this day one year ago. Pick a place or a station and see where its riders go, or where they come from.**
 
-The day is Wednesday 3 June 2026, when 200,603 cleaned trips were taken. Each trip is drawn as a glowing trail along an estimated street route. E-bikes are cyan and classic bikes are ember; casual riders are drawn dimmer than members. Above the trails sits the **tide**: every station glows rose while it fills with bikes and violet while it empties.
+The day on show is today's date in New York, one year back (29 February shows 28 February). A GitHub Action rebuilds the data and redeploys the site every night, so tomorrow it moves on by a day. Citi Bike publishes its trips a month at a time after the month ends, so a year back is always available. On 2025-09-28, the first day built this way, 161,137 cleaned trips were taken. Each trip is drawn as a glowing trail along an estimated street route. E-bikes are cyan and classic bikes are ember; casual riders are drawn dimmer than members. Above the trails sits the **tide**: every station glows rose while it fills with bikes and violet while it empties.
 
 ![Circulation at 07:30: the default filter, rides leaving Central Park](docs/screenshot.jpg)
 
@@ -18,11 +18,12 @@ The page shows its poster frame (the default filter at 07:30) at the first paint
 
 ```mermaid
 flowchart LR
-  S3[(Citi Bike monthly CSVs<br/>Jun–Aug 2026)] --> A1[a_ingest.py<br/>zip → parquet]
-  A1 --> A2[a_select_day.py<br/>busiest Tue–Thu · clean · snap]
+  D[daily.py<br/>today in NYC − 1 year] --> A1
+  S3[(Citi Bike monthly zip<br/>for that month)] --> A1[a_ingest.py<br/>zip → parquet]
+  A1 --> A2[a_select_day.py<br/>clean · snap]
   A2 -->|day.parquet · stations.parquet · pairs.parquet · day.json| C
   OSM[(Geofabrik NY .pbf)] --> B0[b_osrm.sh<br/>osmium clip · OSRM bicycle MLD]
-  A2 -->|129,819 directed pairs| B1[b_route_pairs.py<br/>~970 pairs/s]
+  A2 -->|~100k directed pairs| B1[b_route_pairs.py<br/>cached · ~700 new pairs/s]
   B0 --> B1
   B1 -->|routes.parquet| C[c_encode.py<br/>simplify · time · quantize]
   NTA[(NYC Open Data NTA 2020)] --> C
@@ -31,9 +32,26 @@ flowchart LR
   WEB[web/ · Vite + deck.gl TripsLayer + MapLibre<br/>static build → web/dist]
 ```
 
-- **Day selection**: `a_select_day.py` picks the Tuesday, Wednesday or Thursday of June–August 2026 with the most raw trips. August 2026 is the newest month Citi Bike has published. The monthly files are split by *end* time, so all three months are unioned and trips are counted by `started_at`. That gives 2026-06-03 with 204,801 raw trips. The runner-up was 2026-06-18 with 202,997.
-- **Cleaning** drops trips under 60 s (0) or over 3 h (178), trips with a null station (499), and round trips (3,521). That leaves **200,603**. Coordinates are snapped to each station's median lat/lng for the month, across 2,251 stations.
-- **Routing** uses OSRM v6 natively on arm64 with the bicycle profile. The NY extract is clipped to the five boroughs with osmium. All 129,819 directed pairs have a route: 85,749 were new and routed in 72 s (about 1,190 pairs/s), and the rest came from the OSRM response cache. Only **33 (0.025%)** needed a straight-line fallback: 21 were water-crossing detours and 12 were NJ pairs. The median route is 2.6 km, 1.28× the straight-line distance.
+- **The day**: `daily.py` runs every step for one date: today in America/New_York minus one calendar year, or `--date YYYY-MM-DD`. `a_ingest.py` finds that month's file in the S3 bucket listing (monthly zips from 2024 on, yearly bundles before). The monthly files are split by *end* time, so on the last day of a month the next month's file is read too. Trips are counted by `started_at`.
+- **Cleaning** drops trips under 60 s or over 3 h, trips with a null station, and round trips. The counts for each rule land in `pipeline/out/day.json`. On 2025-09-28 that took 166,156 raw trips down to **161,137**. Coordinates are snapped to each station's median lat/lng for the month.
+- **Routing** uses OSRM v6 with the bicycle profile, on the NY extract clipped to the five boroughs with osmium. Responses are cached in `pipeline/out/routes_cache.duckdb`, keyed by station ids and coordinates, so most pairs on a new day are already routed. On 2025-09-28, 52,374 of 104,038 pairs were new; they took 112 s on an M1, and 19 needed a straight-line fallback. A fully cached re-run of the whole pipeline takes about 35 s.
+- **Headline**: `c_encode.py` picks the neighbourhood with the most lopsided hour of arrivals versus departures. On quiet days (holidays, winter) it relaxes its volume thresholds in tiers, and falls back to the busiest hour if nothing qualifies.
+
+## Every night
+
+`.github/workflows/daily.yml` runs at 05:17 UTC, which is 01:17 in New York in summer and 00:17 in winter. Either way it's already the new day in New York.
+
+1. **build**: `.github/scripts/target-day.py` picks the date. The job restores its caches: the OSRM graph (rebuilt monthly), the route cache, the month's trip parquet and the NTA areas. It then runs `b_osrm.sh` and `daily.py --date …`, and checks that `manifest.json` has that date. Next it regenerates the poster with headless Chromium (SwiftShader WebGL). If the poster fails, the build ships without one rather than show another day's. Last, `npm run build`.
+2. **deploy** publishes `web/dist` to GitHub Pages. If any step fails, nothing is deployed and the previous day stays live.
+3. **record** commits `history/YYYY-MM-DD.json`, a copy of `day.json` plus the deploy time. It keeps a log of every day shown. It also counts as repository activity, and GitHub pauses scheduled workflows after 60 days without any.
+
+**One-time setup**: push to a GitHub repo with `main` as its default branch. Scheduled runs only fire on the default branch, and only `main` deploys. The repo must be public for Pages on a free plan. Then set Settings → Pages → Source to **GitHub Actions**. Data URLs carry `?v=<manifest.generated_at>`, so a browser holding yesterday's cached files never mixes them with today's.
+
+Run it by hand from the Actions tab (**Run workflow**, optional `date`) to rebuild a specific day. Pushes to `main` that touch `web/`, `pipeline/` or the workflow also rebuild and redeploy. A cold run with no caches takes about 20–30 min; a warm one about 10.
+
+The generated data (`web/public/data/`, `pipeline/out/`) is no longer committed. Locally, run `daily.py` once, or the dev server falls back to the synthetic fixture.
+
+The page says **One year ago today** only when the date on show is today's date one year back in New York. If the date is one day behind, which happens between midnight and the nightly deploy, it says **One year ago yesterday**. Otherwise it shows just the date (`web/src/ui/day.ts`).
 
 ## Encoding
 
@@ -52,7 +70,9 @@ u8[tripCount]      flags: bit0 e-bike, bit1 member
 
 ### Budget
 
-| | actual | budget |
+The sizes and counts in this section, and the numbers under Performance, were measured on 2026-06-03, the fixed day before the nightly build. It had 200,603 trips, which is busier than most days the site will show; 2025-09-28 encodes to 12.6 MB. If a day goes over budget, `c_encode.py` raises the simplification tolerance (up to 20 m) and then subsamples casual riders (down to 20%), and records what it used in `manifest.encoded`.
+
+| | actual (2026-06-03) | budget |
 |---|---|---|
 | All 24 chunks (uncompressed) | **15.44 MB** (9.5 MB gzip -9) | ≤ 25 MB |
 | First 3 chunks (07–09, the opening hours) + manifest | **2.79 MB** | ≤ 5 MB |
@@ -85,16 +105,16 @@ All numbers were measured on an M1 MacBook in Chromium with ANGLE/Metal, against
 
 ## Findings
 
-**The tide.** In the morning, the Upper West Side empties: 1,116 bikes leave and 437 arrive between 8 and 9am. From 5 to 6pm it runs the other way, taking in 1.5× more than it sends out. The encoder also considered these runner-ups: from 6:30 to 7:30am the East Village sends out 2.8×; from 6:45 to 7:45am Midtown absorbs 2.5×; from 9:15 to 10:15pm Bed-Stuy absorbs 2.1×.
+Each day's headline sits in `manifest.headline`, with the rule and the candidate table behind it in `pipeline/out/headline.json`. On 2025-09-28 it reads: *From 7:30 to 8:30pm, Bed-Stuy absorbs 1.6× more bikes than it sends out.*
 
 ### Where each number comes from
 
 | number | script → output |
 |---|---|
-| The date, 204,801 raw / 200,603 clean trips, drop counts, 2,251 stations | `pipeline/a_select_day.py` → `pipeline/out/day.json` |
+| The date, raw / clean trips, drop counts, stations, source months | `pipeline/a_select_day.py` → `pipeline/out/day.json` (and `history/YYYY-MM-DD.json` for each deployed day) |
 | Routing coverage and fallbacks | `pipeline/b_route_pairs.py` → `pipeline/out/routes.parquet`, `route_fallbacks.csv` |
-| Headline (2.6×, 1,116 / 437, 48 stations) and runner-ups | `pipeline/c_encode.py` → `pipeline/out/headline.json` (rule and candidate table), `manifest.headline` |
-| Sizes, vertices, simplification, no subsampling | `pipeline/c_encode.py` → `pipeline/out/encode_report.json`; checked by `pipeline/test_encoding.py` |
+| Headline and runner-ups | `pipeline/c_encode.py` → `pipeline/out/headline.json`, `manifest.headline` |
+| Sizes, vertices, simplification, subsampling | `pipeline/c_encode.py` → `pipeline/out/encode_report.json`; checked by `pipeline/test_encoding.py` |
 
 ## Reproduce
 
@@ -102,20 +122,24 @@ Requirements: Python 3.12 with [uv](https://docs.astral.sh/uv/), Docker and osmi
 
 ```bash
 cd pipeline
-uv run python a_ingest.py            # Jun–Aug 2026 zips → data/trips/*.parquet
-uv run python a_select_day.py        # → out/day.json, day/stations/pairs.parquet
 ./b_osrm.sh                          # download + clip NY, build OSRM bicycle (MLD), serve on :5055
-uv run python b_route_pairs.py       # → out/routes.parquet (cached, resumable)
-uv run python b_plot_sample.py       # → out/route_samples.png (sanity check)
-uv run python c_encode.py            # → web/public/data/{manifest.json, trips-HH.bin, stations.json}
-uv run python test_encoding.py       # round-trip + budget test
+uv run python daily.py               # today in NYC − 1 year: ingest → select → route → encode → test
+uv run python daily.py --date 2025-12-25   # any day Citi Bike has published
+
+# or step by step, as daily.py runs them:
+uv run python a_ingest.py --date 2025-09-28     # month zip(s) → data/trips/YYYY-MM.parquet
+uv run python a_select_day.py --date 2025-09-28 # → out/day.json, day/stations/pairs.parquet
+uv run python b_route_pairs.py                  # → out/routes.parquet (cached, resumable)
+uv run python c_encode.py --date 2025-09-28     # → web/public/data/{manifest.json, trips-HH.bin, stations.json}
+uv run python test_encoding.py --date 2025-09-28
+uv run python b_plot_sample.py       # optional: out/route_samples.png (sanity check)
 uv run python make_fixture.py        # optional: synthetic dev data in web/public/fixture/
 
 cd ../web
 npm install
 npm run dev                          # http://localhost:5173 (uses data/, falls back to fixture/)
 npm run build && npm run preview     # static site in web/dist
-npm run poster                       # regenerate the poster frame from the live app
+npm run poster                       # regenerate the poster frame from the live app (CIRC_GL=swiftshader|metal)
 npm run verify -- --preview          # poster at first frame, timings, fps, console errors
 node scripts/fps-day.mjs             # fps across a whole simulated day
 node scripts/shots.mjs --preview [--mobile]   # review screenshots

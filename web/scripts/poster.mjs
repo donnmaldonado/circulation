@@ -4,14 +4,20 @@
 //   npm run poster                       # auto: data/ if present, else fixture/
 //   npm run poster -- --data=fixture     # force a data dir
 //   npm run poster -- --url=http://localhost:5173/
+//   CIRC_GL=swiftshader npm run poster   # software WebGL, as on the headless Linux CI runner
+//
+// Exits non-zero (and writes nothing) if the frame never gets ready; the
+// nightly build then ships without a poster rather than with another day's.
 
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { WEB, arg, launch, startServer, glRenderer } from './lib.mjs';
+import { GL, WEB, arg, launch, startServer, glRenderer } from './lib.mjs';
 
 const WIDTH = 1600; // keep in sync with POSTER_SIZE in src/config.ts
 const HEIGHT = 1000;
 const MAX_BYTES = 150_000;
+// SwiftShader draws a frame of the whole day in seconds, not milliseconds.
+const READY_TIMEOUT = GL === 'swiftshader' ? 300_000 : 90_000;
 
 const server = await startServer('dev');
 const browser = await launch({ headed: !!arg('headed') });
@@ -20,8 +26,17 @@ try {
   page.on('console', (m) => m.type() === 'error' && console.error('[page]', m.text()));
   const data = arg('data');
   const url = `${server.url}?poster${data ? `&data=${data}` : ''}`;
-  await page.goto(url);
-  await page.waitForFunction(() => document.documentElement.dataset.posterReady === '1', null, { timeout: 60_000 });
+  page.setDefaultTimeout(READY_TIMEOUT);
+  await page.goto(url, { timeout: READY_TIMEOUT });
+  const ready = await page.waitForFunction(
+    () => {
+      const html = document.documentElement;
+      return html.dataset.posterReady === '1' ? 'ready' : html.classList.contains('boot-failed') && 'boot failed';
+    },
+    null,
+    { timeout: READY_TIMEOUT },
+  );
+  if ((await ready.jsonValue()) !== 'ready') throw new Error(`poster: the app did not boot (renderer: ${await glRenderer(page)})`);
   await page.waitForTimeout(300);
   const png = await page.screenshot({ type: 'png' });
   console.log(`renderer: ${await glRenderer(page)}`);

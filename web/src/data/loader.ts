@@ -16,9 +16,16 @@ export interface DataSource {
 
 const ROOT = import.meta.env.BASE_URL; // "./" in builds, "/" in dev
 
+// The data changes every night under the same URLs, and a browser may still
+// hold yesterday's copies for a few minutes. Every data URL carries the day's
+// version (manifest.generated_at, baked into the build for the manifest itself)
+// so a manifest and its chunks always come from the same night.
+declare const __DATA_VERSION__: string;
+const versioned = (url: string, v: string | undefined) => (v ? `${url}?v=${encodeURIComponent(v)}` : url);
+
 async function tryManifest(base: string): Promise<Manifest | null> {
   try {
-    const res = await fetch(`${base}manifest.json`);
+    const res = await fetch(versioned(`${base}manifest.json`, base === `${ROOT}data/` ? __DATA_VERSION__ : ''));
     // The dev server answers unknown paths with index.html, so check the type too.
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
     return (await res.json()) as Manifest;
@@ -43,7 +50,7 @@ export async function resolveDataSource(params: URLSearchParams): Promise<DataSo
 }
 
 export async function loadStations(src: DataSource): Promise<Station[]> {
-  const res = await fetch(`${src.base}stations.json`);
+  const res = await fetch(versioned(`${src.base}stations.json`, src.manifest.generated_at));
   if (!res.ok) throw new Error(`stations.json: HTTP ${res.status}`);
   return (await res.json()) as Station[];
 }
@@ -134,7 +141,7 @@ export class ChunkStore {
   private async fetchChunk(hour: number, attempt = 0): Promise<void> {
     const name = this.src.manifest.chunks[hour] ?? `trips-${pad(hour)}.bin`;
     try {
-      const res = await fetch(`${this.src.base}${name}`);
+      const res = await fetch(versioned(`${this.src.base}${name}`, this.src.manifest.generated_at));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
       const t0 = performance.now();

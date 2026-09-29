@@ -9,6 +9,8 @@ export interface Manifest {
   headline: string;
   /** Other honest tide ratios the encoder considered (c_encode.py), best first. */
   runner_ups?: string[];
+  /** UTC time the pipeline wrote this day (absent on the fixture); versions every data URL. */
+  generated_at?: string;
   /** Present (true) only on the synthetic fixture. */
   fixture?: boolean;
 }

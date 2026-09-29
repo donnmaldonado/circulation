@@ -30,13 +30,19 @@ Method:
   * Consecutive vertices of a trip that are identical after quantization and time
     rounding are dropped (they carry no information).
   * Trips within a chunk are ordered by started_at, then ride_id.
-  * Budget: all chunks <= 25 MB and hours 07-09 + manifest <= 5 MB. If over, the
-    simplification tolerance is raised first (5 -> 8 -> 12 -> 16 -> 20 m), and only
-    then casual riders are subsampled by a seeded hash of ride_id.
+  * Budget: all chunks <= 25 MB, and hours 07-09 + manifest and the worst 3 consecutive hours
+    + manifest each <= 5 MB. If over, the simplification tolerance is raised first
+    (5 -> 8 -> 12 -> 16 -> 20 m), and only then casual riders are subsampled by a seeded hash
+    of ride_id (down to 20%).
+
+Usage: cd pipeline && uv run python c_encode.py [--date YYYY-MM-DD]
+  --date only checks that out/day.json holds that day (the day is whatever a_select_day wrote).
 """
 
 from __future__ import annotations
 
+import argparse
+import datetime as dt
 import hashlib
 import json
 import math
@@ -268,9 +274,14 @@ REGION_GROUPS = {
     "the Lower East Side": ["Lower East Side"],
 }
 HEADLINE_WINDOW_BINS = 4  # 60-minute windows (4 x 15-min tide bins), sliding by 15 min
-HEADLINE_MIN_SMALL_SIDE = 100  # the smaller of arrivals/departures in the window
-HEADLINE_MIN_TOTAL = 400  # arrivals + departures in the window
-HEADLINE_MIN_HUB_VOLUME = 1000  # the headline itself must be about a busy place
+# (min smaller side, min arrivals + departures, min hub volume) per 60-minute window. The first
+# tier was tuned on a busy summer weekday (~200k trips). Quieter days (weekends, holidays, winter)
+# may have no candidate there, or only near-balanced hubs (a Sunday's busiest region may move
+# 1.1x), so the thresholds are relaxed tier by tier until a hub reaches HEADLINE_MIN_RATIO. If
+# none does, the highest ratio >= HEADLINE_MIN_RATIO of the loosest tier is used, and failing
+# that the headline falls back to the day's busiest hour.
+HEADLINE_TIERS = [(100, 400, 1000), (50, 200, 500), (25, 100, 250), (10, 40, 100)]
+HEADLINE_MIN_RATIO = 1.5
 
 
 def fmt_clock(minutes: int) -> str:
@@ -291,7 +302,11 @@ def fmt_window(b0: int, nb: int) -> str:
 def load_ntas():
     if not NTA_PATH.exists():
         NTA_PATH.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["curl", "-sSfL", "-o", str(NTA_PATH), NTA_URL], check=True)
+        # via .part: CI caches this file under a fixed key, so it must never be a partial download
+        part = NTA_PATH.with_suffix(".part")
+        subprocess.run(["curl", "-sSfL", "--retry", "3", "-o", str(part), NTA_URL], check=True)
+        json.loads(part.read_text())
+        part.rename(NTA_PATH)
     fc = json.loads(NTA_PATH.read_text())
     names = [f["properties"]["ntaname"] for f in fc["features"]]
     geoms = [shapely.geometry.shape(f["geometry"]) for f in fc["features"]]
@@ -309,9 +324,12 @@ def assign_regions(st: pd.DataFrame) -> pd.Series:
     return nta.map(lambda n: to_group.get(n, n) if n is not None else None), nta
 
 
-def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
-    region, nta = assign_regions(st)
-    st = st.assign(region=region, nta=nta)
+def _jsonable(r) -> dict:
+    return {k: (v.item() if isinstance(v, np.generic) else v) for k, v in dict(r).items()}
+
+
+def headline_candidates(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray,
+                        min_small: int, min_total: int) -> pd.DataFrame:
     rows = []
     W = HEADLINE_WINDOW_BINS
     for reg, g in st.groupby("region"):
@@ -320,19 +338,38 @@ def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
         d = dep[ix].sum(axis=0)
         for b0 in range(0, 96 - W + 1):
             A, D = int(a[b0:b0 + W].sum()), int(d[b0:b0 + W].sum())
-            small = min(A, D)
-            if small < HEADLINE_MIN_SMALL_SIDE or A + D < HEADLINE_MIN_TOTAL:
+            if min(A, D) < min_small or A + D < min_total:
                 continue
             kind = "absorbs" if A >= D else "sends"
             ratio = A / D if A >= D else D / A
             rows.append(dict(region=reg, stations=int(len(ix)), window=fmt_window(b0, W),
                              start_bin=b0, arrivals=A, departures=D, kind=kind,
                              ratio=round(ratio, 3)))
-    cand = pd.DataFrame(rows)
+    cols = ["region", "stations", "window", "start_bin", "arrivals", "departures", "kind", "ratio"]
+    cand = pd.DataFrame(rows, columns=cols)
     cand["volume"] = cand.arrivals + cand.departures
-    # best window per (region, kind), then rank by ratio
-    best = (cand.sort_values(["ratio", "volume"], ascending=False)
-            .drop_duplicates(["region", "kind"]).reset_index(drop=True))
+    return cand
+
+
+def busiest_hour_sentence(dep: np.ndarray) -> tuple[str, dict]:
+    """Fallback headline: the 60-minute window (15-min steps) in which the most trips began."""
+    W = HEADLINE_WINDOW_BINS
+    per_bin = dep.sum(axis=0)
+    sums = np.convolve(per_bin, np.ones(W, dtype=np.int64), mode="valid")
+    b0 = int(np.argmax(sums))
+    a, b = b0 * 15, (b0 + W) * 15
+    sa, sb = fmt_clock(a), fmt_clock(b)
+    if sa[-2:] == sb[-2:]:
+        sa = sa[:-2]
+    n = int(sums[b0])
+    return (f"The busiest hour was {sa} to {sb}, when {n:,} rides began.",
+            dict(start_bin=b0, window=fmt_window(b0, W), departures=n))
+
+
+def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
+    region, nta = assign_regions(st)
+    st = st.assign(region=region, nta=nta)
+    W = HEADLINE_WINDOW_BINS
 
     def sentence(r) -> str:
         a, b = r["start_bin"] * 15, (r["start_bin"] + W) * 15
@@ -344,24 +381,62 @@ def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
             return f"From {sa} to {sb}, {r['region']} absorbs {x} more bikes than it sends out."
         return f"From {sa} to {sb}, {r['region']} sends out {x} more bikes than it takes in."
 
-    best["sentence"] = best.apply(sentence, axis=1)
-    hubs = best[best.volume >= HEADLINE_MIN_HUB_VOLUME]
-    top = hubs.iloc[0]
-    # runner-ups: the headline region's evening flip, the highest ratio of any
-    # honest candidate (smaller volume), the next hub, and the evening homecoming.
+    tier_used, cand, best, hubs = None, None, None, None
+    for tier, (min_small, min_total, min_hub) in enumerate(HEADLINE_TIERS):
+        cand = headline_candidates(st, arr, dep, min_small, min_total)
+        if cand.empty:
+            continue
+        # best window per (region, kind), then rank by ratio
+        best = (cand.sort_values(["ratio", "volume"], ascending=False)
+                .drop_duplicates(["region", "kind"]).reset_index(drop=True))
+        best["sentence"] = best.apply(sentence, axis=1)
+        # hubs: the best busy window per (region, kind) (filter on volume before picking the best
+        # window, so a region's busy hour is not hidden by a quieter hour with a higher ratio)
+        hubs = (cand[(cand.volume >= min_hub) & (cand.ratio >= HEADLINE_MIN_RATIO)]
+                .sort_values(["ratio", "volume"], ascending=False)
+                .drop_duplicates(["region", "kind"]).reset_index(drop=True))
+        if len(hubs):
+            hubs["sentence"] = hubs.apply(sentence, axis=1)
+        tier_used = tier
+        if len(hubs):
+            break
+    thresholds = HEADLINE_TIERS[tier_used] if tier_used is not None else HEADLINE_TIERS[-1]
+    min_small, min_total, min_hub = thresholds
+
     picks = []
-    def add(df, role):
-        df = df[~df.set_index(["region", "kind"]).index.isin(
-            [(top.region, top.kind)] + [(p["region"], p["kind"]) for p in picks])]
-        if len(df):
-            picks.append(dict(df.iloc[0], role=role))
-    pm = best[best.start_bin >= 48]
-    add(pm[(pm.kind != top.kind) & (pm.region == top.region)], "evening flip of the headline region")
-    add(best, "highest ratio of any candidate (below the hub volume)")
-    add(hubs, "next hub")
-    add(pm[pm.kind == "absorbs"], "evening sink (homecoming)")
-    runners = [{k: (v.item() if isinstance(v, np.generic) else v) for k, v in r.items()} for r in picks]
-    top_d = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in top.items()}
+    if best is None or best.ratio.max() < HEADLINE_MIN_RATIO:
+        # no region has a real tide even at the loosest tier: say something simple and true
+        text, fb = busiest_hour_sentence(dep)
+        top_d = dict(sentence=text, fallback="busiest hour", **fb)
+        pick_rule = (f"fallback: no region window reached a {HEADLINE_MIN_RATIO}x ratio at the loosest "
+                     "threshold; the busiest hour of departures")
+        if best is None:
+            best = pd.DataFrame(columns=["sentence"])
+            cand = pd.DataFrame(columns=["ratio"])
+    else:
+        if hubs.empty:  # a tide exists but not at hub volume, even in the loosest tier
+            hubs = best
+            pick_rule = "highest ratio of any candidate (no candidate reached the hub volume)"
+        else:
+            pick_rule = (f"highest ratio (>= {HEADLINE_MIN_RATIO}) among candidates with "
+                         f"arrivals + departures >= {min_hub} "
+                         "in the hour (a headline should be about a place where many bikes move; "
+                         "smaller neighbourhoods with higher ratios are listed as runner-ups)")
+        top = hubs.iloc[0]
+        # runner-ups: the headline region's evening flip, the highest ratio of any
+        # honest candidate (smaller volume), the next hub, and the evening homecoming.
+        def add(df, role):
+            df = df[~df.set_index(["region", "kind"]).index.isin(
+                [(top.region, top.kind)] + [(p["region"], p["kind"]) for p in picks])]
+            if len(df):
+                picks.append(dict(df.iloc[0], role=role))
+        pm = best[best.start_bin >= 48]
+        add(pm[(pm.kind != top.kind) & (pm.region == top.region)], "evening flip of the headline region")
+        add(best, "highest ratio of any candidate (below the hub volume)")
+        add(hubs, "next hub")
+        add(pm[pm.kind == "absorbs"], "evening sink (homecoming)")
+        top_d = _jsonable(top)
+    runners = [_jsonable(r) for r in picks]
     unassigned = st[st.region.isna()]
     out = dict(
         source="pipeline/c_encode.py",
@@ -374,16 +449,17 @@ def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
                  "(same 15-min binning as stations.json tide; trips within a region count on both sides)",
             window=f"{W * 15}-minute windows sliding in 15-minute steps (a 15-min bin is too noisy "
                    "for a neighbourhood headline; an hour is the honest unit of a rush)",
-            threshold=f"window counted only if min(arrivals, departures) >= {HEADLINE_MIN_SMALL_SIDE} "
-                      f"and arrivals + departures >= {HEADLINE_MIN_TOTAL}",
+            threshold=f"window counted only if min(arrivals, departures) >= {min_small} "
+                      f"and arrivals + departures >= {min_total}",
+            tiers=f"thresholds (min side, min total, min hub volume) tried in order {HEADLINE_TIERS} "
+                  f"until a hub reaches a {HEADLINE_MIN_RATIO}x ratio; tier used: {tier_used}",
             ratio="max(arrivals, departures) / min(...), rounded to one decimal in the sentence",
-            pick=f"highest ratio among candidates with arrivals + departures >= {HEADLINE_MIN_HUB_VOLUME} "
-                 "in the hour (a headline should be about a place where many bikes move; smaller "
-                 "neighbourhoods with higher ratios are listed as runner-ups)",
+            pick=pick_rule,
             regions="stations assigned to NYC 2020 Neighborhood Tabulation Areas (NYC Open Data "
                     "9nt8-h7nd) by point-in-polygon; NTAs grouped into familiar names per "
                     "REGION_GROUPS in c_encode.py, others keep their NTA name",
         ),
+        tier_used=tier_used,
         region_groups=REGION_GROUPS,
         stations_unassigned=int(len(unassigned)),
         region_station_counts={k: int(v) for k, v in st.region.value_counts().items()},
@@ -394,7 +470,15 @@ def headline(st: pd.DataFrame, arr: np.ndarray, dep: np.ndarray):
 
 
 # ---------------------------------------------------------------- main
+def worst3(sizes: dict[int, int]) -> int:
+    """Largest total of any 3 consecutive hour chunks (wrapping past midnight, as the app loops)."""
+    return max(sum(sizes[(h + k) % 24] for k in range(3)) for h in range(24))
+
+
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--date", default=None, help="YYYY-MM-DD; fail unless out/day.json is this day")
+    args = ap.parse_args()
     con = duckdb.connect()
     trips = con.sql(f"""
         select ride_id, rideable_type, member_casual, started_at, ended_at,
@@ -406,6 +490,8 @@ def main() -> None:
     stations = con.sql(f"select id, name, lng, lat from '{OUT / 'stations.parquet'}'").df()
     day = json.loads((OUT / "day.json").read_text())
     date = day["date"]
+    if args.date and args.date != date:
+        raise SystemExit(f"out/day.json is {date}, not {args.date}; run a_select_day.py --date {args.date}")
     log(f"loaded {len(trips):,} trips, {len(routes):,} routes, {len(stations):,} stations")
 
     midnight = pd.Timestamp(date)
@@ -470,13 +556,15 @@ def main() -> None:
             sizes = {h: chunk_size(c) for h, c in chunks.items()}
             total = sum(sizes.values())
             first3 = sum(sizes[h] for h in FIRST3_HOURS)
+            w3 = worst3(sizes)
             att = dict(simplify_m=tol, casual_sample=rate, trips=int(len(tsub)), total_bytes=total,
-                       first3_0709_bytes_excl_manifest=first3,
+                       first3_0709_bytes_excl_manifest=first3, worst3_bytes_excl_manifest=w3,
                        vertices=int(sum(len(c["times"]) for c in chunks.values())))
             attempts.append(att)
             log(f"tol={tol}m casual={rate}: total {total / 1e6:.2f} MB, 07-09 {first3 / 1e6:.2f} MB, "
+                f"worst 3h {w3 / 1e6:.2f} MB, "
                 f"{att['vertices'] / len(tsub):.1f} v/trip, deduped {dropped:,}")
-            if total <= BUDGET_TOTAL and first3 + 20_000 <= BUDGET_FIRST3:
+            if total <= BUDGET_TOTAL and max(first3, w3) + 20_000 <= BUDGET_FIRST3:
                 chosen = (tol, rate, tsub, chunks, dropped, bbox, nbad)
                 break
         if chosen:
@@ -531,6 +619,8 @@ def main() -> None:
     enc_trips = int(len(tsub))
     manifest = dict(
         date=date,
+        weekday=day.get("weekday"),
+        generated_at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         bbox=bbox,
         chunks=names,
         histogram=hist.astype(int).tolist(),
@@ -567,8 +657,7 @@ def main() -> None:
             "hours_00_02_plus_manifest": sum(per_hour[h]["bytes"] for h in (0, 1, 2)) + msize,
             "hours_06_08_plus_manifest": sum(per_hour[h]["bytes"] for h in (6, 7, 8)) + msize,
             "hours_08_10_plus_manifest": sum(per_hour[h]["bytes"] for h in (8, 9, 10)) + msize,
-            "worst_any_3_consecutive_plus_manifest": max(
-                sum(per_hour[(h + k) % 24]["bytes"] for k in range(3)) for h in range(24)) + msize,
+            "worst_any_3_consecutive_plus_manifest": worst3({p["hour"]: p["bytes"] for p in per_hour}) + msize,
         },
         budget=dict(total_max=BUDGET_TOTAL, first3_max=BUDGET_FIRST3),
         peak_hour=max(per_hour, key=lambda p: p["bytes"]),
@@ -579,6 +668,7 @@ def main() -> None:
     )
     (OUT / "encode_report.json").write_text(json.dumps(report, indent=1))
     assert total <= BUDGET_TOTAL and report["first3"]["hours_07_09_plus_manifest"] <= BUDGET_FIRST3
+    assert report["first3"]["worst_any_3_consecutive_plus_manifest"] <= BUDGET_FIRST3
     log(f"done: {total / 1e6:.2f} MB total, 07-09+manifest "
         f"{report['first3']['hours_07_09_plus_manifest'] / 1e6:.2f} MB, "
         f"{report['mean_vertices_per_trip']} v/trip, tol {tol} m, casual {rate}")

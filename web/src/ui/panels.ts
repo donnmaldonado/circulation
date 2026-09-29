@@ -7,7 +7,7 @@
 
 import { COLORS } from '../config';
 import type { Manifest } from '../data/types';
-import { formatDay } from './day';
+import { formatDay, yearAgoLabel } from './day';
 
 export type PanelId = 'about';
 
@@ -110,18 +110,20 @@ function frame(body: string): string {
 const rgb = (c: readonly number[]) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 
 function aboutHtml(m: Manifest, isFixture: boolean): string {
+  const ago = isFixture ? null : yearAgoLabel(m.date);
   return `
     <div class="pn-kicker">About</div>
     <h2 class="pn-title">Circulation: Citi Bike trips</h2>
     ${isFixture ? '<p class="ab-warn">You are looking at the <b>synthetic fixture</b>, not real trips.</p>' : ''}
-    <p>Every Citi Bike trip that started on ${formatDay(m.date)} (${m.totals.trips.toLocaleString('en-US')} trips), the busiest Tuesday, Wednesday or Thursday of June–August 2026. At the default 720× a day plays in two minutes.</p>
+    <p>Every Citi Bike trip that started on ${formatDay(m.date)}${ago ? `, ${ago.toLowerCase()}` : ''}: ${m.totals.trips.toLocaleString('en-US')} trips. At the default 720× the day plays in two minutes.</p>
+    <p>The page shows New York exactly one year back and is rebuilt every night with the next day. Citi Bike publishes its trip data a month at a time, after the month is over, so today's rides are not out yet; the same date a year earlier is.</p>
     <p>Use the bar at the top left to pick a place, or click any station dot, and choose rides <b>leaving</b> or <b>arriving</b>. The page opens on the rides leaving Central Park. Pick <b>All of New York City</b> to see every trip. The address bar keeps your choice, so you can share it.</p>
     <ul class="ab-key">
       <li><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike trip · <i style="--c:${rgb(COLORS.classic)}"></i>classic bike; casual riders drawn dimmer than members.</li>
       <li><i class="dot" style="--c:var(--tide-sink)"></i>station filling up (more bikes arriving than leaving, per 15 min) · <i class="dot" style="--c:var(--tide-source)"></i>emptying out. Dot size = activity.</li>
     </ul>
     <h3>Estimated routes</h3>
-    <p>Routes are <b>estimated</b>: Citi Bike publishes only start and end stations and times, not GPS traces. Each trail follows the OSRM bicycle shortest path between its two stations, with its real start and end times spread evenly along the path. Station positions are each station's median reported coordinates for the month. Trips under 60 s or over 3 h, round trips, and trips missing a station were dropped before encoding (about 2% of the day).</p>
+    <p>Routes are <b>estimated</b>: Citi Bike publishes only start and end stations and times, not GPS traces. Each trail follows the OSRM bicycle shortest path between its two stations, with its real start and end times spread evenly along the path. Station positions are each station's median reported coordinates for the month. Trips under 60 s or over 3 h, round trips, and trips missing a station were dropped before encoding.</p>
     <h3>Data &amp; credits</h3>
     <ul class="ab-credits">
       <li>Trips: <a href="https://citibikenyc.com/system-data" target="_blank" rel="noopener">Citi Bike System Data</a> — Lyft / NYC Bike Share, used under the Citi Bike Data License Agreement.</li>

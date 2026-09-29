@@ -3,6 +3,7 @@
 //   npm run shots                                   # desktop set, dev server -> $TMPDIR/circulation-shots
 //   npm run shots -- --preview --mobile             # 390x844 @3x set, production build
 //   npm run shots -- --only=peak-am,peak-pm --out=/tmp/shots
+//   npm run shots -- --only=default,about --now=2026-09-28T12:00-04:00   # the page as read on that day
 //
 // Each shot opens a fresh page at ?t=HH:MM&paused (so the frame is exact), waits
 // for the live map, the tide dots and every chunk, runs its steps, then shoots.
@@ -20,6 +21,8 @@ const DPR = Number(arg('dpr', MOBILE ? 3 : 2));
 const OUT = resolve(arg('out', resolve(process.env.TMPDIR ?? '/tmp', 'circulation-shots')));
 const ONLY = arg('only') ? String(arg('only')).split(',') : null;
 const EXTRA = arg('query', '');
+/** Pretend it is this moment (e.g. 2027-06-03T12:00-04:00), to see the "One year ago today" label on older data. */
+const NOW = arg('now') ? new Date(arg('now')) : null;
 mkdirSync(OUT, { recursive: true });
 
 /** Click the busiest station dot near the map centre (via the page's own index). */
@@ -94,6 +97,7 @@ try {
     });
     page.on('console', (m) => m.type() === 'error' && errors.push(`${shot.name}: ${m.text()}`));
     page.on('pageerror', (e) => errors.push(`${shot.name}: ${e}`));
+    if (NOW) await page.clock.setFixedTime(NOW);
     const q = [shot.query, EXTRA].filter(Boolean).join('&');
     await page.goto(`${server.url}?${q}`);
     await page.waitForFunction(
