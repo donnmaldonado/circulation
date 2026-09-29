@@ -6,9 +6,9 @@ export const DAY_SECONDS = 86_400;
 /** Opening time: 07:30, with the morning rush already building. */
 export const START_TIME = 7.5 * 3600;
 
-/** Sim seconds per real second. 720x plays 24h in 2 minutes. */
+/** Sim seconds per real second. 180x plays 24h in 8 minutes, 720x in 2. */
 export const SPEEDS = [180, 720, 2880] as const;
-export const DEFAULT_SPEED = 720;
+export const DEFAULT_SPEED = 180;
 
 /** Trail length in sim seconds (locked: ~90 s). */
 export const TRAIL_LENGTH = 90;
@@ -18,6 +18,9 @@ export const COLORS = {
   ebike: [64, 216, 255] as [number, number, number], // electric cyan  #40D8FF
   classic: [255, 122, 69] as [number, number, number], // warm ember   #FF7A45
 };
+/** The selection on the map (outline, ring, dock dots) and its marks in the UI: marigold, clear of every other colour. */
+export const SELECTION_COLOR = [255, 206, 64] as [number, number, number]; // #FFCE40
+
 /** Alpha by rider type: members full, casual riders dimmer. */
 export const ALPHA = { member: 255, casual: 110 };
 

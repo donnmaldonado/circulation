@@ -362,6 +362,27 @@
 .tide-key em {
   font-style: normal;
 }
+/* two dots, small and big: dot size is how busy a station is */
+.tk-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.tk-dots b {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tide-neutral);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+}
+.tk-dots b + b {
+  width: 9px;
+  height: 9px;
+}
+.tide-key .tk-label {
+  margin-right: 4px;
+  color: var(--fg);
+}
 
 /* ---------------------------------------------------------------- station panel */
 .station-panel {
@@ -545,6 +566,90 @@
   text-transform: none;
   font-family: var(--mono);
 }
+h3 .sp-hint {
+  font-family: var(--font);
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+/* the selection's mark, as on the map: a place's dock dot, or a station's ring */
+.sel-badge {
+  flex: none;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--sel, #ffce40);
+  vertical-align: 1px;
+}
+.sel-badge.ring {
+  width: 15px;
+  height: 15px;
+  border: 3px solid var(--sel, #ffce40);
+  background: transparent;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sel, #ffce40) 22%, transparent);
+  vertical-align: -2px;
+}
+.st-rank .sel-badge {
+  margin-right: 0;
+}
+.st-rank .sel-badge.ring {
+  width: 13px;
+  height: 13px;
+  border-width: 2.5px;
+}
+.ab-key i.sel-badge {
+  width: 10px;
+  height: 10px;
+  margin: 0 4px 1px 0;
+  border-radius: 50%;
+  background: var(--sel, #ffce40);
+  box-shadow: none;
+}
+.ab-key i.sel-badge.ring {
+  width: 13px;
+  height: 13px;
+  border: 2.5px solid var(--sel, #ffce40);
+  background: transparent;
+}
+/* picker: the badge sits at the pill's left edge while something is selected */
+.fb-place > .sel-badge {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  margin: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fb-place:not(.marked) > .sel-badge {
+  display: none;
+}
+.fb-place.marked select {
+  padding-left: 38px;
+}
+
+/* numbered badge: the top docks, on the map and in the list */
+.rank {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(255, 244, 230, 0.92);
+  border-radius: 50%;
+  background: rgba(6, 7, 10, 0.85);
+  color: rgba(255, 244, 230, 0.95);
+  font: 700 10px/1 var(--font);
+}
+.sp-dests li .rank {
+  margin-right: -2px;
+}
+.sp-dests li .sp-dn {
+  flex: 1;
+}
 /* rides per hour; click a bar to jump there */
 .sp-hours {
   display: flex;
@@ -598,6 +703,19 @@
 }
 .st-flow {
   color: var(--muted);
+}
+.st-rank {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 1px;
+  color: var(--fg);
+  font-size: 11.5px;
+}
+.st-rank .rank {
+  width: 15px;
+  height: 15px;
+  font-size: 9px;
 }
 .st-flow em {
   font-style: normal;
@@ -955,6 +1073,19 @@
   margin-bottom: 1px;
   border-radius: 50%;
   box-shadow: none;
+}
+.ab-key i.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(255, 244, 230, 0.92);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255, 244, 230, 0.95);
+  font: normal 700 9px/1 var(--font);
 }
 .ab-keys kbd {
   display: inline-block;
