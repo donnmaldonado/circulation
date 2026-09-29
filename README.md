@@ -14,7 +14,7 @@ Every Citi Bike trip in New York from this day one year ago, replayed on a map. 
 - Each dot is a station. It glows **rose** while it fills up with bikes and **violet** while it empties, and grows with the number of rides there that hour.
 - The selection is marked in **yellow** and labelled on the map: a ring for a station, or an outline with a dot on each dock for a place. Numbered badges mark the busiest docks at the other end, in the same order as **Details**.
 - The page opens on rides **leaving Central Park**. Use the filter bar (top left) to pick all of NYC, another place, or the last station you clicked, and to switch between **Leaving** and **Arriving**. **Details** shows rides by hour and the busiest docks at the other end.
-- Drag the timeline to scrub. Space plays/pauses, ←/→ jumps 15 minutes, 1/2/3 sets the speed, Esc closes panels.
+- The timeline charts every trip across the day, or with a place or station picked, that selection's rides per 15 minutes. Drag it to scrub. Space plays/pauses, ←/→ jumps 15 minutes, 1/2/3 sets the speed, Esc closes panels.
 - The URL follows the filter, so any view can be shared.
 
 Routes are estimates. Citi Bike publishes start and end stations and times, not GPS traces, so each trail is the OSRM cycling route between its two stations, with the trip's real duration spread along it.

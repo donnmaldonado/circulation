@@ -1,5 +1,6 @@
-// Play/pause, clock readout (with the day), speed selector, legend. Keyboard: space toggles
-// play, ←/→ seek ∓/± 15 min, 1/2/3 pick a speed.
+// The bottom dock: play/pause, clock readout (with the day), speed selector,
+// the day's timeline (scrubber.ts mounts into `slot`), and the legend.
+// Keyboard: space toggles play, ←/→ seek ∓/± 15 min, 1/2/3 pick a speed.
 
 import { COLORS, SPEEDS } from '../config';
 import { formatClock, type Clock } from '../playback/clock';
@@ -23,27 +24,34 @@ export function mountControls(parent: HTMLElement, clock: Clock, date: string): 
   const root = document.createElement('div');
   root.className = 'hud';
   root.innerHTML = `
-    <div class="hud-key" aria-hidden="true">
-      <span><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike</span>
-      <span><i style="--c:${rgb(COLORS.classic)}"></i>classic</span>
-      <span class="hk-tide">stations: <b class="dot sink"></b>filling <b class="dot source"></b>emptying</span>
-    </div>
-    <div class="hud-slot" data-slot="scrubber"></div>
-    <div class="hud-row">
-      <div class="controls">
-        <button class="btn play" type="button" aria-label="Play"></button>
-        <div class="clock" aria-live="off"><span class="clock-day">${formatDay(date, 'short')}</span><span class="clock-time">--:--</span></div>
-        <div class="speeds" role="radiogroup" aria-label="Playback speed">
-          ${SPEEDS.map((s) => `<button type="button" role="radio" data-speed="${s}">${s}×</button>`).join('')}
+    <div class="dock">
+      <div class="dock-main">
+        <div class="controls">
+          <button class="btn play" type="button" aria-label="Play"></button>
+          <div class="clock" aria-live="off"><span class="clock-time">--:--</span><span class="clock-day">${formatDay(date, 'short')}</span></div>
+          <div class="speeds" role="radiogroup" aria-label="Playback speed">
+            ${SPEEDS.map((s) => `<button type="button" role="radio" data-speed="${s}">${s}×</button>`).join('')}
+          </div>
+          <button type="button" class="speed-cycle" aria-label="Playback speed (tap to change)"></button>
         </div>
-        <button type="button" class="speed-cycle" aria-label="Playback speed (tap to change)"></button>
+        <div class="hud-slot" data-slot="scrubber"></div>
+      </div>
+      <div class="dock-foot">
         <div class="legend" aria-label="Legend">
+          <span class="lg-group lg-trips" title="Each trail is one trip. Casual riders are drawn fainter than members.">
+            <em class="lg-label">Trips</em>
+            <span><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike</span>
+            <span><i style="--c:${rgb(COLORS.classic)}"></i>classic</span>
+            <span class="legend-note">fainter = casual</span>
+          </span>
+        </div>
+        <div class="hud-key" aria-hidden="true">
           <span><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike</span>
           <span><i style="--c:${rgb(COLORS.classic)}"></i>classic</span>
-          <span class="legend-note">casual riders dimmer</span>
+          <span class="hk-tide"><b class="dot sink"></b>filling <b class="dot source"></b>emptying</span>
         </div>
+        <div class="hud-nav" data-slot="nav"></div>
       </div>
-      <div class="hud-nav" data-slot="nav"></div>
     </div>`;
   parent.appendChild(root);
 

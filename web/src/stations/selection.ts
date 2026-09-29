@@ -25,6 +25,8 @@ import { pickedStation } from './tide-layer';
 export const DIMMED_TRIPS = 0.12;
 /** Opacity of the tide dots while something is selected (its rings stay full). */
 export const DIMMED_TIDE = 0.4;
+/** Colour of the selection's full-day routes: where they overlap they build up to this and no brighter. */
+export const ROUTE_COLOR = [89, 85, 80] as [number, number, number];
 const TOP_N = 5;
 
 type LngLat = [number, number];
@@ -52,6 +54,8 @@ interface Selection {
   internal: number;
   /** Highlighted rides per hour (of start for 'out', of arrival for 'in'). */
   hourly: Uint32Array;
+  /** The same per 15 minutes, for the timeline. */
+  quarterly: Uint32Array;
   /** Busiest docks at the other end, outside the selection. */
   top: { station: number; count: number }[];
   /** Binary path data of the highlighted trips (null if none). */
@@ -154,6 +158,14 @@ export class StationSelection {
     return { inbound: this.sel?.inbound ?? 0, outbound: this.sel?.outbound ?? 0 };
   }
 
+  /** The selection's rides per 15 minutes, and what they are ("Leaving Central Park"); null when nothing is selected. */
+  get timeline(): { values: Uint32Array; caption: string } | null {
+    const sel = this.sel;
+    if (!sel) return null;
+    const name = sel.target.kind === 'place' ? sel.target.place.name : this.index.stations[sel.target.station].name;
+    return { values: sel.quarterly, caption: `${sel.dir === 'out' ? 'Leaving' : 'Arriving at'} ${name}` };
+  }
+
   get details(): boolean {
     return this.detailsOpen;
   }
@@ -248,11 +260,13 @@ export class StationSelection {
         id: 'sel-paths',
         data: sel.paths as never,
         _pathType: 'open',
-        getColor: [255, 244, 230, 44],
+        // Normal (not additive) blending: overlapping paths build up towards
+        // this colour and stop there, so the busiest streets top out at ~35%
+        // brightness instead of saturating to white. One path alone is ~6%.
+        getColor: [...ROUTE_COLOR, 46],
         widthUnits: 'pixels',
         getWidth: 1,
         widthMinPixels: 1,
-        parameters: ADDITIVE_BLEND,
       }),
       new CulledTripsLayer({
         id: 'sel-trips',
@@ -445,6 +459,7 @@ export class StationSelection {
     const isIn = (s: number) => s !== NO_STATION && mask[s] === 1;
     const counts = new Uint32Array(index.n);
     const hourly = new Uint32Array(24);
+    const quarterly = new Uint32Array(TIDE_BINS);
     let outbound = 0;
     let inbound = 0;
     let internal = 0;
@@ -464,7 +479,9 @@ export class StationSelection {
         if (a && b) internal++;
         const other = dir === 'out' ? to[j] : from[j];
         if (other !== NO_STATION && !mask[other]) counts[other]++;
-        hourly[dir === 'out' ? h : Math.floor(chunk.tripEnd[j] / 3600) % 24]++;
+        const at = dir === 'out' ? chunk.tripStart[j] : chunk.tripEnd[j];
+        hourly[dir === 'out' ? h : Math.floor(at / 3600) % 24]++;
+        quarterly[Math.floor(at / 900) % TIDE_BINS]++;
         picked.push([h, j]);
         vertices += chunk.startIndices[j + 1] - chunk.startIndices[j];
       }
@@ -529,6 +546,7 @@ export class StationSelection {
       inbound,
       internal,
       hourly,
+      quarterly,
       top,
       paths,
       trips,
@@ -564,18 +582,25 @@ export class StationSelection {
           `<button type="button" data-hour="${h}" style="--h:${((100 * c) / hmax).toFixed(1)}%" aria-label="${formatClock(h * 3600)}: ${n(c)} rides" title="${formatClock(h * 3600)} · ${n(c)} rides"></button>`,
       )
       .join('');
-    const peak = sel.hourly.indexOf(Math.max(...sel.hourly));
+    const rides = out ? sel.outbound : sel.inbound;
+    const peak = rides ? formatClock(sel.hourly.indexOf(Math.max(...sel.hourly)) * 3600) : '–';
+    const share = (100 * rides) / Math.max(1, this.store.src.manifest.totals.trips);
     const inside = place ? place.name : 'this dock';
     this.panel.innerHTML = `
       <button class="sp-close" type="button" aria-label="Hide details">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
-      <div class="sp-kicker">${place ? 'Place' : 'Station'}</div>
+      <div class="sp-kicker">${place ? `Place · ${sel.members.length} docks` : 'Station'}</div>
       <h2 class="sp-name">${selBadge(sel.target.kind)}${esc(name)}</h2>
-      ${place ? `<div class="sp-blurb">${esc(place.blurb)} · ${sel.members.length} docks</div>` : '<div class="sp-flow"></div>'}
-      <div class="sp-total"><b>${n(out ? sel.outbound : sel.inbound)}</b> rides ${out ? 'leaving' : 'arriving'}</div>
-      <h3>${out ? 'Leaving' : 'Arriving'} by hour${sel.inbound + sel.outbound ? ` <span class="sp-peak">peak ${formatClock(peak * 3600)}</span>` : ''}</h3>
-      <div class="sp-hours" style="--now:${this.clock.hour}">${bars}</div>
-      <h3>${out ? 'Top destinations' : 'Top origins'}${sel.top.length ? ' <span class="sp-peak sp-hint">numbered on the map</span>' : ''}</h3>
+      ${place ? `<div class="sp-blurb">${esc(place.blurb)}</div>` : '<div class="sp-flow"></div>'}
+      <div class="sp-stats">
+        <div><b>${n(rides)}</b>rides ${out ? 'leaving' : 'arriving'}</div>
+        <div><b>${share < 0.1 && rides ? '<0.1' : share.toFixed(1)}%</b>of the day's trips</div>
+        <div><b>${peak}</b>busiest hour</div>
+      </div>
+      <h3>${out ? 'Leaving' : 'Arriving'} by hour <span class="sp-hint">click a bar to jump there</span></h3>
+      <div class="sp-hours">${bars}</div>
+      <div class="sp-axis" aria-hidden="true"><span>12a</span><span>6a</span><span>12p</span><span>6p</span></div>
+      <h3>${out ? 'Top destinations' : 'Top origins'}${sel.top.length ? ' <span class="sp-hint">numbered on the map</span>' : ''}</h3>
       <ol class="sp-dests">${dests}</ol>
       ${place && sel.internal ? `<div class="sp-note">${n(sel.internal)} of these rides ${out ? 'end' : 'start'} at ${esc(inside)} too.</div>` : ''}
       ${hours < 24 ? `<div class="sp-note">Counting… ${hours}/24 hours loaded</div>` : ''}`;

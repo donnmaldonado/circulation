@@ -13,7 +13,7 @@ import { mountFilter } from './ui/filter';
 import { startFpsMeter } from './ui/fps';
 import { mountPanels } from './ui/panels';
 import { revealLive } from './ui/poster';
-import { agoPrefix, formatDay } from './ui/day';
+import { agoPrefix, formatDay, tripsLabel } from './ui/day';
 import { mountScrubber } from './ui/scrubber';
 import type { App } from './app';
 
@@ -39,8 +39,10 @@ async function boot(): Promise<App> {
   // and for today's date ("One year ago today" only while that is still true in New York).
   const brandAgo = document.querySelector('[data-brand-ago]');
   const brandDate = document.querySelector('[data-brand-date]');
+  const brandTrips = document.querySelector('[data-brand-trips]');
   if (brandAgo) brandAgo.textContent = source.isFixture ? '' : agoPrefix(source.manifest.date);
   if (brandDate) brandDate.textContent = formatDay(source.manifest.date);
+  if (brandTrips) brandTrips.textContent = tripsLabel(source.manifest.totals.trips);
   const stationsReady = loadStations(source).catch((err) => {
     console.error('[circulation] stations.json failed; tide layer off', err);
     return null;
@@ -102,6 +104,19 @@ async function boot(): Promise<App> {
     const slot = document.querySelector<HTMLElement>('[data-slot="filter"]');
     if (slot && !POSTER_MODE) mountFilter(slot, sel, stations, panels);
     sel.onChange(() => syncUrl(sel, stations));
+    // The timeline draws the filter's own rides while one is on. Only a new selection or direction
+    // rebuilds its counts; showing or hiding the details leaves them as they are.
+    if (scrubber) {
+      let shown: Uint32Array | null = null;
+      const syncTimeline = () => {
+        const tl = sel.timeline;
+        if ((tl?.values ?? null) === shown) return;
+        shown = tl?.values ?? null;
+        scrubber.setSeries(shown, tl?.caption);
+      };
+      sel.onChange(syncTimeline);
+      syncTimeline();
+    }
     mark('tide');
   });
 

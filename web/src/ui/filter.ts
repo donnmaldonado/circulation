@@ -10,6 +10,8 @@ import type { Dir, StationSelection } from '../stations/selection';
 import type { PanelsHandle } from './panels';
 
 const ALL = 'all';
+const PANEL_SVG =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M9.75 2.75v10.5"/></svg>';
 
 export function mountFilter(
   slot: HTMLElement,
@@ -29,13 +31,16 @@ export function mountFilter(
       <button type="button" role="radio" data-dir="out">Leaving<b></b></button>
       <button type="button" role="radio" data-dir="in">Arriving<b></b></button>
     </div>
-    <button type="button" class="fb-details" aria-controls="details" aria-expanded="false">Details</button>`;
+    <button type="button" class="fb-details" aria-controls="details" aria-expanded="false">${PANEL_SVG}Details</button>
+    <span class="fb-hint">or click any station on the map</span>`;
 
   const select = slot.querySelector('select')!;
   const place = slot.querySelector<HTMLElement>('.fb-place')!;
   const badge = place.querySelector<HTMLElement>('.sel-badge')!;
   const dirBtns = [...slot.querySelectorAll<HTMLButtonElement>('[data-dir]')];
+  const dirGroup = slot.querySelector<HTMLElement>('.fb-dir')!;
   const detailsBtn = slot.querySelector<HTMLButtonElement>('.fb-details')!;
+  const hint = slot.querySelector<HTMLElement>('.fb-hint')!;
   // The clicked station gets its own group while it is selected.
   const stationGroup = document.createElement('optgroup');
   stationGroup.label = 'Station';
@@ -74,9 +79,11 @@ export function mountFilter(
       const on = b.dataset.dir === sel.dir;
       b.classList.toggle('on', on && sel.active);
       b.setAttribute('aria-checked', String(on));
-      b.disabled = !sel.active;
       b.querySelector('b')!.textContent = sel.active ? n(b.dataset.dir === 'out' ? outbound : inbound) : '';
     }
+    // With every trip on show there is no direction to pick: a pointer to the stations instead.
+    dirGroup.hidden = !sel.active;
+    hint.hidden = sel.active;
     const shown = sel.active && sel.details && !panels?.current;
     detailsBtn.hidden = !sel.active;
     detailsBtn.classList.toggle('on', shown);

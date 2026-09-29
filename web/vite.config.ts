@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { START_TIME } from './src/config.ts';
-import { agoPrefix, formatDay } from './src/ui/day.ts';
+import { agoPrefix, formatDay, tripsLabel } from './src/ui/day.ts';
 
 /**
  * Inline the poster's tiny blurred placeholder (written by scripts/poster.mjs)
@@ -65,7 +65,8 @@ function inlineFromManifest(): Plugin {
       return html
         .replace('%DATA_PRELOADS%', preloads)
         .replace('%BRAND_AGO%', m ? agoPrefix(m.date) : '')
-        .replace('%BRAND_DATE%', m ? formatDay(m.date) : '');
+        .replace('%BRAND_DATE%', m ? formatDay(m.date) : '')
+        .replace('%BRAND_TRIPS%', m ? tripsLabel(m.totals.trips) : '');
     },
   };
 }

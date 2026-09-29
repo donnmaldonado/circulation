@@ -2,9 +2,15 @@
   --bg: #050608;
   --fg: #e6e9ef;
   --muted: #8b93a3;
-  --panel: rgba(10, 12, 16, 0.72);
-  --line: rgba(255, 255, 255, 0.09);
+  --faint: #5f6675;
+  --panel: rgba(11, 13, 18, 0.78);
+  --panel-solid: rgba(11, 13, 18, 0.9);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --hover: rgba(255, 255, 255, 0.07);
+  --focus: rgba(64, 216, 255, 0.8);
   --accent: #ffffff;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
   --font: ui-sans-serif, -apple-system, 'Inter', 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 }
@@ -13,59 +19,60 @@
   background: var(--bg);
 }
 
-/* ---------------------------------------------------------------- HUD */
+/* ---------------------------------------------------------------- HUD (the bottom dock) */
 .hud {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 24px max(20px, env(safe-area-inset-bottom));
+  padding: 0 20px max(18px, env(safe-area-inset-bottom));
   pointer-events: none;
   font: 400 13px/1.2 var(--font);
   color: var(--fg);
 }
-.hud > * {
+.dock {
   pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
-.hud-slot:empty {
-  display: none;
+/* transport on the left, the day's timeline filling the rest */
+.dock-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px 6px 10px;
 }
-
-.hud-row {
+.dock-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  pointer-events: none;
+  gap: 16px;
+  min-height: 34px;
+  padding: 3px 6px 3px 16px;
+  border-top: 1px solid var(--line);
 }
-.hud-row > * {
-  pointer-events: auto;
-}
+
 .controls {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 14px 8px 8px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  gap: 12px;
 }
 
 .btn {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   color: #07080b;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease;
@@ -75,29 +82,28 @@
   transform: scale(1.05);
 }
 .btn svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   fill: currentColor;
-}
-.btn:focus-visible,
-.speeds button:focus-visible {
-  outline: 2px solid rgba(64, 216, 255, 0.8);
-  outline-offset: 2px;
 }
 
 .clock {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font: 500 22px/1 var(--mono);
+  min-width: 4.4em;
+}
+.clock-time {
+  font: 500 23px/1 var(--mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  min-width: 3.1em;
+  letter-spacing: 0.01em;
 }
 .clock-day {
   color: var(--muted);
   font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -107,6 +113,7 @@
   padding: 2px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
 }
 .speeds button {
   padding: 5px 9px;
@@ -125,20 +132,56 @@
   color: var(--fg);
 }
 
+/* speed as one cycling button: phones only */
+.speed-cycle {
+  display: none;
+  min-width: 52px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  font: 500 12.5px/1 var(--mono);
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- legend (the dock's footer) */
 .legend {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+  gap: 16px;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }
-.legend span {
+.lg-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.lg-group + .lg-group {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+.legend .lg-group[hidden] {
+  display: none;
+}
+.lg-group > span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.lg-group em {
+  font-style: normal;
+}
+.lg-label {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 .legend i {
   width: 14px;
@@ -148,33 +191,18 @@
   box-shadow: 0 0 6px var(--c);
 }
 .legend-note {
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
-/* speed as one cycling button, and a one-line colour key: phones only */
-.speed-cycle,
+/* one line of key on phones, in place of the legend */
 .hud-key {
   display: none;
-}
-.speed-cycle {
-  min-width: 52px;
-  height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--fg);
-  font: 500 12.5px/1 var(--mono);
-  cursor: pointer;
-}
-.hud-key {
   align-items: center;
   gap: 12px;
-  padding: 0 4px;
+  min-width: 0;
   color: var(--muted);
   font-size: 11px;
-  text-shadow: 0 1px 6px #000, 0 0 2px #000;
-  pointer-events: none !important;
+  white-space: nowrap;
 }
 .hud-key span {
   display: inline-flex;
@@ -187,9 +215,6 @@
   border-radius: 2px;
   background: var(--c);
   box-shadow: 0 0 6px var(--c);
-}
-.hk-tide {
-  margin-left: auto;
 }
 .dot {
   display: inline-block;
@@ -204,21 +229,111 @@
   background: var(--tide-source, #9a7bff);
 }
 
-@media (max-width: 640px) {
-  .hud {
-    gap: 8px;
-    padding: 0 12px max(12px, env(safe-area-inset-bottom));
+/* stations: two dots, small and big (dot size is how busy a station is), then the colour ramp */
+.tide-key i {
+  width: 34px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tide-sink), var(--tide-neutral), var(--tide-source));
+  box-shadow: none;
+}
+.tk-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.tk-dots b {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tide-neutral);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+}
+.tk-dots b + b {
+  width: 9px;
+  height: 9px;
+}
+
+/* the selection's full-day routes: faint where one ride passed, brighter where many did */
+.route-key i {
+  width: 34px;
+  height: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--route) 25%, transparent), var(--route));
+  box-shadow: none;
+}
+
+/* make room as the window narrows: the rider note steps aside while the routes show, then the routes go */
+@media (max-width: 1180px) {
+  .legend:has(.route-key:not([hidden])) .legend-note {
+    display: none;
   }
+}
+@media (max-width: 1020px) {
+  .legend .route-key {
+    display: none;
+  }
+}
+@media (max-width: 860px) {
+  .legend .tk-size,
   .legend-note {
     display: none;
   }
 }
-@media (max-width: 900px) {
+
+/* phones: the timeline on top, the transport under it, the key and About in the footer */
+@media (max-width: 760px) {
+  /* the top padding holds the key line (see .dock-foot), so --hud-h counts it */
+  .hud {
+    padding: 36px 10px max(10px, env(safe-area-inset-bottom));
+  }
+  .dock {
+    position: relative;
+    border-radius: 14px;
+  }
+  .dock-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 10px 4px;
+  }
+  .scrub-track {
+    height: 34px;
+  }
+  .dock-main .hud-slot {
+    order: -1;
+  }
   .legend {
     display: none;
   }
   .hud-key {
     display: flex;
+  }
+  /* the key and About float just above the dock, over the map; taps between them reach the map */
+  .dock-foot {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    min-height: 0;
+    padding: 0 0 0 4px;
+    border-top: 0;
+    pointer-events: none;
+  }
+  .hud-key {
+    text-shadow: 0 1px 6px #000, 0 0 2px #000;
+  }
+  .hud-nav {
+    pointer-events: auto;
+  }
+  .hud-nav .nav-btn:not(.on) {
+    background: var(--panel);
+  }
+  .hud-nav .nav-btn {
+    height: 30px;
+    border: 1px solid var(--line);
+    color: var(--fg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 }
 @media (max-width: 560px) {
@@ -227,31 +342,39 @@
   }
   .speed-cycle {
     display: block;
+    margin-left: auto;
   }
-  .controls {
-    gap: 10px;
-    padding: 6px 8px 6px 6px;
+  .btn {
+    width: 38px;
+    height: 38px;
   }
   .clock {
-    font-size: 19px;
-    min-width: 0;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .clock-time {
+    font-size: 21px;
+  }
+}
+@media (max-width: 360px) {
+  .hk-tide {
+    display: none !important;
   }
 }
 
 /* ---------------------------------------------------------------- scrubber */
 .hud-slot {
   display: flex;
+  flex: 1;
+  min-width: 0;
 }
 .scrubber {
   position: relative;
   flex: 1;
   min-width: 0;
-  padding: 6px 12px 3px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  padding: 4px 0 0;
+  border-radius: 8px;
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -260,17 +383,39 @@
   outline: none;
 }
 .scrubber:focus-visible {
-  box-shadow: 0 0 0 2px rgba(64, 216, 255, 0.7);
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 .scrub-track {
   position: relative;
-  height: 34px;
+  height: 44px;
 }
 .scrub-track canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+/* what the sparkline is: every trip, or the filter's own rides */
+.scrub-cap {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c, var(--fg));
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 4px var(--bg), 0 0 2px var(--bg);
+}
+.scrub-cap em {
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 400;
 }
 .scrub-head {
   position: absolute;
@@ -308,11 +453,11 @@
 .scrub-hover span {
   display: block;
   width: max-content;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(10, 12, 16, 0.92);
-  border: 1px solid var(--line);
+  background: var(--panel-solid);
+  border: 1px solid var(--line-strong);
   color: var(--fg);
   font: 500 11.5px/1.2 var(--mono);
   font-variant-numeric: tabular-nums;
@@ -323,9 +468,10 @@
 }
 .scrub-ticks {
   position: relative;
-  height: 13px;
+  height: 15px;
+  margin-top: 1px;
   color: var(--muted);
-  font: 500 10px/13px var(--mono);
+  font: 500 10px/15px var(--mono);
 }
 .scrub-ticks span {
   position: absolute;
@@ -335,71 +481,51 @@
 .scrub-ticks span:first-child {
   transform: none;
 }
-.scrub-ticks span::before {
+.scrub-ticks span::before,
+.scrub-ticks i {
   content: '';
   position: absolute;
-  left: 50%;
-  top: -4px;
+  top: -2px;
   width: 1px;
   height: 3px;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.28);
+}
+.scrub-ticks span::before {
+  left: 50%;
 }
 .scrub-ticks span:first-child::before {
   left: 0;
 }
-
-/* ---------------------------------------------------------------- tide legend */
-.tide-key {
-  gap: 6px;
+.scrub-ticks i {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.14);
 }
-.tide-key i {
-  width: 34px;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--tide-sink), var(--tide-neutral), var(--tide-source));
-  box-shadow: none;
-}
-.tide-key em {
-  font-style: normal;
-}
-/* two dots, small and big: dot size is how busy a station is */
-.tk-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.tk-dots b {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--tide-neutral);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
-}
-.tk-dots b + b {
-  width: 9px;
-  height: 9px;
-}
-.tide-key .tk-label {
-  margin-right: 4px;
-  color: var(--fg);
+@media (max-width: 480px) {
+  /* 12a 6a 12p 6p only */
+  .scrub-ticks span:nth-of-type(even) {
+    display: none;
+  }
 }
 
 /* ---------------------------------------------------------------- station panel */
 .station-panel {
   position: fixed;
-  top: 20px;
+  top: 18px;
   right: 20px;
   z-index: 12;
-  width: 300px;
-  max-height: calc(100vh - var(--hud-h, 140px) - 64px);
+  width: 320px;
+  max-height: calc(100vh - var(--hud-h, 140px) - 56px);
   overflow: auto;
+  overscroll-behavior: contain;
   box-sizing: border-box;
-  padding: 14px 16px 12px;
-  background: rgba(10, 12, 16, 0.84);
+  padding: 16px 18px 14px;
+  background: var(--panel-solid);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: panel-in 0.22s ease-out;
   color: var(--fg);
   font: 400 13px/1.35 var(--font);
 }
@@ -435,12 +561,13 @@
 .sp-kicker {
   color: var(--muted);
   font-size: 10.5px;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .sp-name {
-  margin: 3px 28px 6px 0;
-  font-size: 16px;
+  margin: 4px 28px 5px 0;
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.25;
 }
@@ -464,29 +591,35 @@
 .flow.source {
   color: var(--tide-source);
 }
+/* three figures across: rides, share of the day, busiest hour */
 .sp-stats {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  margin: 10px 0 12px;
-  padding: 8px 0;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 14px;
+  padding: 10px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
 }
 .sp-stats b {
+  display: block;
+  margin-bottom: 3px;
   color: var(--fg);
-  font: 600 15px/1 var(--mono);
+  font: 600 17px/1 var(--mono);
   font-variant-numeric: tabular-nums;
 }
-.sp-day {
-  margin-left: auto;
-  font-size: 11px;
-  opacity: 0.7;
+.sp-stats div:first-child b {
+  color: var(--sel, #ffce40);
 }
 .station-panel h3 {
-  margin: 0 0 6px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 7px;
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 500;
@@ -546,30 +679,16 @@
   color: var(--muted);
   font-size: 12px;
 }
-.sp-total {
-  margin: 10px 0 12px;
-  color: var(--muted);
-}
-.sp-total b {
-  color: var(--fg);
-  font: 600 13px/1 var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-/* About and the details share one slot; the poster shows the filter without its panel */
 .about-open .station-panel,
 .poster-mode .station-panel {
   display: none;
 }
-.sp-peak {
-  float: right;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  font-family: var(--mono);
-}
 h3 .sp-hint {
-  font-family: var(--font);
-  letter-spacing: 0.02em;
-  opacity: 0.75;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-transform: none;
 }
 /* the selection's mark, as on the map: a place's dock dot, or a station's ring */
 .sel-badge {
@@ -651,27 +770,34 @@ h3 .sp-hint {
   flex: 1;
 }
 /* rides per hour; click a bar to jump there */
+/* rides per hour, in the selection colour; click a bar to jump there */
 .sp-hours {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 38px;
-  margin-bottom: 12px;
+  height: 44px;
 }
 .sp-hours button {
   flex: 1;
   height: 100%;
   padding: 0;
   border: 0;
-  background: linear-gradient(to top, rgba(255, 244, 230, 0.45) var(--h), rgba(255, 255, 255, 0.04) var(--h));
+  background: linear-gradient(to top, color-mix(in srgb, var(--sel, #ffce40) 50%, transparent) var(--h), rgba(255, 255, 255, 0.04) var(--h));
   border-radius: 2px;
   cursor: pointer;
 }
 .sp-hours button:hover {
-  background: linear-gradient(to top, rgba(255, 244, 230, 0.75) var(--h), rgba(255, 255, 255, 0.08) var(--h));
+  background: linear-gradient(to top, color-mix(in srgb, var(--sel, #ffce40) 80%, transparent) var(--h), rgba(255, 255, 255, 0.09) var(--h));
 }
 .sp-hours button.now {
-  background: linear-gradient(to top, #fff var(--h), rgba(255, 255, 255, 0.14) var(--h));
+  background: linear-gradient(to top, #fff var(--h), rgba(255, 255, 255, 0.16) var(--h));
+}
+.sp-axis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 4px 0 14px;
+  color: var(--faint);
+  font: 500 9.5px/1 var(--mono);
 }
 
 .station-tip {
@@ -776,11 +902,6 @@ h3 .sp-hint {
   filter: invert(0.8);
 }
 
-.boot-failed .bar-title::after {
-  content: ' · could not load data';
-  color: #ff7a45;
-}
-
 /* ---------------------------------------------------------------- filter bar (top left) */
 .bar-controls {
   display: flex;
@@ -797,8 +918,12 @@ h3 .sp-hint {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 999px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.bar-controls > [hidden] {
+  display: none;
 }
 .fb-place {
   position: relative;
@@ -807,7 +932,7 @@ h3 .sp-hint {
   content: '';
   position: absolute;
   top: 50%;
-  right: 14px;
+  right: 15px;
   width: 6px;
   height: 6px;
   margin-top: -5px;
@@ -816,17 +941,20 @@ h3 .sp-hint {
   transform: rotate(45deg);
   pointer-events: none;
 }
+.fb-place:hover {
+  border-color: var(--line-strong);
+}
 .fb-place select {
   appearance: none;
   -webkit-appearance: none;
-  max-width: min(260px, 60vw);
-  height: 38px;
-  padding: 0 34px 0 14px;
+  max-width: min(280px, 60vw);
+  height: 40px;
+  padding: 0 36px 0 16px;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--fg);
-  font: 600 13.5px/1 var(--font);
+  font: 600 14px/1 var(--font);
   text-overflow: ellipsis;
   cursor: pointer;
 }
@@ -841,7 +969,123 @@ h3 .sp-hint {
   padding: 3px;
 }
 .fb-dir button {
-  height: 30px;
+  height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 12.5px/1 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.fb-dir button:hover {
+  color: var(--fg);
+}
+.fb-dir button.on {
+  background: rgba(255, 255, 255, 0.94);
+  color: #07080b;
+}
+.fb-dir b {
+  font: 600 11.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.fb-dir b:not(:empty) {
+  margin-left: 7px;
+}
+/* a toggle for the panel, drawn apart from the direction choice: outlined, never filled white */
+.fb-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 15px 0 13px;
+  color: var(--muted);
+  font: 500 12.5px/1 var(--font);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.fb-details svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+.fb-details:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.fb-details.on {
+  color: var(--fg);
+  border-color: var(--line-strong);
+  background: rgba(38, 42, 52, 0.85);
+}
+.fb-details.on svg path {
+  stroke-width: 2.2;
+}
+.bar-controls > .fb-hint {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 15px;
+  box-sizing: border-box;
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bar-controls > .fb-hint[hidden] {
+  display: none;
+}
+.boot-failed .brand-sub::after {
+  content: ' · could not load data';
+  color: #ff7a45;
+}
+@media (max-width: 640px) {
+  .bar {
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
+    max-width: calc(100vw - 24px);
+  }
+  .brand {
+    margin-bottom: 9px;
+  }
+  .brand-kicker {
+    display: none;
+  }
+  .brand-title {
+    font-size: 17px;
+  }
+  .brand-sub {
+    font-size: 12px;
+  }
+  .fb-place select {
+    max-width: calc(100vw - 24px);
+  }
+  .fb-dir button {
+    padding: 0 11px;
+  }
+  .bar-controls > .fb-hint {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- nav (panel entry points, in the dock's footer) */
+.hud-nav {
+  flex: none;
+}
+.hud-nav:empty {
+  display: none;
+}
+.nav {
+  display: flex;
+  gap: 4px;
+}
+.nav-btn {
+  height: 28px;
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
@@ -851,104 +1095,31 @@ h3 .sp-hint {
   white-space: nowrap;
   cursor: pointer;
 }
-.fb-dir button:hover:not(:disabled) {
-  color: var(--fg);
-}
-.fb-dir button.on {
-  background: rgba(255, 255, 255, 0.9);
-  color: #07080b;
-}
-.fb-dir button:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-.fb-dir b {
-  font: 600 12px/1 var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-.fb-dir b:not(:empty) {
-  margin-left: 6px;
-}
-.fb-details {
-  height: 38px;
-  padding: 0 14px;
-  color: var(--fg);
-  font: 500 12.5px/1 var(--font);
-  cursor: pointer;
-}
-.fb-details:hover {
-  background: rgba(30, 33, 40, 0.8);
-}
-.fb-details.on {
-  background: rgba(255, 255, 255, 0.9);
-  color: #07080b;
-}
-.fb-details[hidden] {
-  display: none;
-}
-@media (max-width: 640px) {
-  .bar {
-    top: max(12px, env(safe-area-inset-top));
-    left: 12px;
-    max-width: calc(100vw - 24px);
-  }
-  .bar-title {
-    margin-bottom: 6px;
-  }
-  .fb-place select {
-    max-width: calc(100vw - 24px);
-  }
-  .fb-dir button {
-    padding: 0 10px;
-  }
-}
-
-/* ---------------------------------------------------------------- nav (panel entry points) */
-.hud-nav:empty {
-  display: none;
-}
-.nav {
-  display: flex;
-  gap: 6px;
-  padding: 4px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.nav-btn {
-  height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--fg);
-  font: 500 13px/1 var(--font);
-  white-space: nowrap;
-  cursor: pointer;
-}
 .nav-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--hover);
+  color: var(--fg);
 }
 .nav-btn.on {
-  background: rgba(255, 255, 255, 0.9);
-  color: #07080b;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--fg);
 }
+.btn:focus-visible,
+.speeds button:focus-visible,
 .nav-btn:focus-visible,
 .speed-cycle:focus-visible,
 .pn-close:focus-visible,
+.sp-close:focus-visible,
 .fb-place select:focus-visible,
 .fb-dir button:focus-visible,
 .fb-details:focus-visible {
-  outline: 2px solid rgba(64, 216, 255, 0.8);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------- side panel (about) */
 .side-panel {
   position: fixed;
-  top: 20px;
+  top: 18px;
   right: 20px;
   z-index: 12;
   width: 392px;
@@ -958,9 +1129,10 @@ h3 .sp-hint {
   overscroll-behavior: contain;
   box-sizing: border-box;
   padding: 16px 18px 16px;
-  background: rgba(10, 12, 16, 0.88);
+  background: var(--panel-solid);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: var(--fg);
@@ -1099,7 +1271,8 @@ h3 .sp-hint {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .side-panel {
+  .side-panel,
+  .station-panel {
     animation: none;
   }
 }

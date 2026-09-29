@@ -43,3 +43,8 @@ export function agoPrefix(iso: string, now: Date = new Date()): string {
   const ago = yearAgoLabel(iso, now);
   return ago ? `${ago} · ` : '';
 }
+
+/** The title line's trip count: "161,137 trips". */
+export function tripsLabel(trips: number): string {
+  return `${trips.toLocaleString('en-US')} trips`;
+}

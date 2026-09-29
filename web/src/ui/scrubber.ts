@@ -1,27 +1,38 @@
-// Day scrubber: the manifest's 288-bin "trips started per 5 min" histogram as a
-// filled sparkline, a playhead, hour ticks and a hover readout. Drag (mouse,
+// Day scrubber: a filled sparkline of the day, a playhead, hour ticks, a
+// caption and a hover readout. It draws the manifest's 288-bin "trips started
+// per 5 min" histogram, or while a filter is on, that filter's rides per
+// 15 min in the selection colour (setSeries). Drag (mouse,
 // pen or touch) seeks live; a click jumps. Playback pauses while the thumb is
 // held and resumes on release if it was playing. Keyboard: it is a
 // role="slider" — ←/→ ±5 min (Shift: ±1 h), PageUp/PageDown ±1 h, Home/End.
 //
-// The histogram is drawn once per resize into two stacked canvases (dim = the
+// The sparkline is drawn once per resize or series into two stacked canvases (dim = the
 // rest of the day, bright = already played); the playhead only moves a
 // transform and a clip-path, so ticking costs no canvas repaint.
 
-import { DAY_SECONDS } from '../config';
+import { DAY_SECONDS, SELECTION_COLOR } from '../config';
 import { formatClock, type Clock } from '../playback/clock';
 
-const TICKS = [
-  [0, '12a'],
-  [6, '6a'],
-  [12, '12p'],
-  [18, '6p'],
-] as const;
+/** Labelled every 3 hours; a minor tick on every other hour. */
+const TICKS = ['12a', '3a', '6a', '9a', '12p', '3p', '6p', '9p'];
+
+const WHITE = '255,255,255';
+const SEL = SELECTION_COLOR.join(',');
+
+/** What the sparkline draws: counts per equal bin across the day. */
+interface Series {
+  values: ArrayLike<number>;
+  caption: string;
+  /** "r,g,b" of the fill and ridge line. */
+  rgb: string;
+}
 
 export interface ScrubberHandle {
   root: HTMLElement;
-  /** Redraw the sparkline (e.g. after the histogram changes). */
+  /** Redraw the sparkline (e.g. after a resize). */
   redraw(): void;
+  /** Draw these counts (equal bins across the day) instead of every trip; null goes back to every trip. */
+  setSeries(values: ArrayLike<number> | null, caption?: string): void;
 }
 
 export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number[]): ScrubberHandle {
@@ -36,11 +47,15 @@ export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number
     <div class="scrub-track">
       <canvas class="scrub-dim" aria-hidden="true"></canvas>
       <canvas class="scrub-lit" aria-hidden="true"></canvas>
+      <div class="scrub-cap" aria-hidden="true"></div>
       <div class="scrub-head" aria-hidden="true"></div>
       <div class="scrub-hover" aria-hidden="true"><span></span></div>
     </div>
     <div class="scrub-ticks" aria-hidden="true">
-      ${TICKS.map(([h, label]) => `<span style="left:${((h / 24) * 100).toFixed(4)}%">${label}</span>`).join('')}
+      ${Array.from({ length: 24 }, (_, h) => {
+        const left = `left:${((h / 24) * 100).toFixed(4)}%`;
+        return h % 3 ? `<i style="${left}"></i>` : `<span style="${left}">${TICKS[h / 3]}</span>`;
+      }).join('')}
     </div>`;
   slot.appendChild(root);
 
@@ -50,17 +65,33 @@ export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number
   const head = root.querySelector<HTMLElement>('.scrub-head')!;
   const hover = root.querySelector<HTMLElement>('.scrub-hover')!;
   const hoverText = hover.querySelector('span')!;
-  const bins = histogram.length || 288;
-  const peak = Math.max(1, ...histogram);
+  const cap = root.querySelector<HTMLElement>('.scrub-cap')!;
+  const everyTrip: Series = { values: histogram, caption: 'All trips', rgb: WHITE };
+  let series = everyTrip;
+  let bins = 0;
+  let peak = 1;
+  let binMinutes = 5;
+  const setCaption = () => {
+    cap.innerHTML = `${series.caption}<em> · per ${binMinutes} min</em>`;
+    cap.style.setProperty('--c', `rgb(${series.rgb})`);
+  };
 
   let width = 0;
   const draw = () => {
+    const values = series.values;
+    bins = values.length || 288;
+    binMinutes = Math.round(DAY_SECONDS / 60 / bins);
+    peak = Math.max(1, ...Array.from(values));
+    setCaption();
     const rect = track.getBoundingClientRect();
     width = rect.width;
     const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const c = series.rgb;
+    // Yellow at low alpha reads as olive on the dark panel; give it a little more.
+    const dimFill = c === WHITE ? 0.16 : 0.24;
     for (const [canvas, fill, top] of [
-      [dim, 'rgba(255,255,255,0.20)', 'rgba(255,255,255,0.34)'],
-      [lit, 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0.95)'],
+      [dim, `rgba(${c},${dimFill})`, `rgba(${c},0.36)`],
+      [lit, `rgba(${c},0.55)`, `rgba(${c},0.95)`],
     ] as const) {
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
       canvas.height = Math.max(1, Math.round(rect.height * dpr));
@@ -69,7 +100,7 @@ export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number
       ctx.clearRect(0, 0, rect.width, rect.height);
       const h = rect.height;
       const x = (i: number) => (i / bins) * rect.width;
-      const y = (i: number) => h - 1 - ((histogram[i] ?? 0) / peak) * (h - 4);
+      const y = (i: number) => h - 1 - ((values[i] ?? 0) / peak) * (h - 4);
       // Filled area through bin centres, then a 1px ridge line on top.
       ctx.beginPath();
       ctx.moveTo(0, h);
@@ -116,8 +147,8 @@ export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number
   const showHover = (clientX: number) => {
     const rect = track.getBoundingClientRect();
     const t = timeAt(clientX);
-    const n = histogram[Math.min(bins - 1, Math.floor((t / DAY_SECONDS) * bins))] ?? 0;
-    hoverText.textContent = `${formatClock(t)} · ${n.toLocaleString('en-US')} rides / 5 min`;
+    const n = series.values[Math.min(bins - 1, Math.floor((t / DAY_SECONDS) * bins))] ?? 0;
+    hoverText.textContent = `${formatClock(t)} · ${n.toLocaleString('en-US')} rides / ${binMinutes} min`;
     // Keep the bubble inside the track.
     const x = clientX - rect.left;
     const half = hoverText.offsetWidth / 2;
@@ -174,5 +205,12 @@ export function mountScrubber(slot: HTMLElement, clock: Clock, histogram: number
     clock.seek(Math.round(t / 300) * 300);
   });
 
-  return { root, redraw: draw };
+  return {
+    root,
+    redraw: draw,
+    setSeries(values, caption = '') {
+      series = values ? { values, caption, rgb: SEL } : everyTrip;
+      draw();
+    },
+  };
 }
