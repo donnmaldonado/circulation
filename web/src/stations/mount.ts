@@ -8,7 +8,7 @@ import type { Station } from '../data/types';
 import type { Scene } from '../map/scene';
 import type { Clock } from '../playback/clock';
 import { placeCenter } from './places';
-import { type Dir, DIMMED_TIDE, StationSelection } from './selection';
+import { type Dir, DIMMED_TIDE, ROUTE_COLOR, StationSelection } from './selection';
 import { StationIndex } from './station-index';
 import { TideModel } from './tide-layer';
 import { NEUTRAL_CSS, SINK_CSS, SOURCE_CSS } from './tide-scale';
@@ -58,6 +58,7 @@ export function mountTide(o: TideOptions): TideHandle {
   root.setProperty('--tide-source', SOURCE_CSS);
   root.setProperty('--tide-neutral', NEUTRAL_CSS);
   root.setProperty('--sel', `rgb(${SELECTION_COLOR.join(', ')})`);
+  root.setProperty('--route', `rgb(${ROUTE_COLOR.join(', ')})`);
 
   const sel = new StationSelection(index, store, clock, () => scene.requestRender(), o.root, {
     dir: o.dir,
@@ -94,10 +95,23 @@ export function mountTide(o: TideOptions): TideHandle {
 
   if (o.legend) {
     const key = document.createElement('span');
-    key.className = 'tide-key';
+    key.className = 'lg-group tide-key';
     key.title = 'One dot per station. Bigger = more rides there this hour. Colour = net bikes arriving (filling) or leaving (emptying) this 15 minutes.';
-    key.innerHTML = '<b class="tk-dots" aria-hidden="true"><b></b><b></b></b><em class="tk-label">stations</em><em>filling</em><i></i><em>emptying</em>';
+    key.innerHTML =
+      '<em class="lg-label">Stations</em><span class="tk-size"><b class="tk-dots" aria-hidden="true"><b></b><b></b></b>busier</span><span><em>filling</em><i></i><em>emptying</em></span>';
     o.legend.appendChild(key);
+
+    // While something is selected: the faint full-day routes, brighter where more of its rides share a street.
+    const routes = document.createElement('span');
+    routes.className = 'lg-group route-key';
+    routes.innerHTML = '<em class="lg-label">Routes</em><span><em>few</em><i></i><em>many rides</em></span>';
+    const syncRoutes = (active: boolean) => {
+      routes.hidden = !active;
+      routes.title = `Every ride ${sel.dir === 'out' ? 'leaving' : 'arriving at'} the selection today, drawn along its route. Brighter streets carry more of those rides.`;
+    };
+    syncRoutes(sel.active);
+    sel.onChange(syncRoutes);
+    o.legend.appendChild(routes);
   }
 
   return { index, model, selection: sel };
