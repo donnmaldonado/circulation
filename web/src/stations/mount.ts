@@ -12,6 +12,7 @@ import { type Dir, DIMMED_TIDE, StationSelection } from './selection';
 import { StationIndex } from './station-index';
 import { TideModel } from './tide-layer';
 import { NEUTRAL_CSS, SINK_CSS, SOURCE_CSS } from './tide-scale';
+import { SELECTION_COLOR } from '../config';
 
 /** Layer order (trips are 0). `?tide=under` draws the dots beneath the trails instead. */
 const ORDER = { selectionTrails: 5, tideOver: 10, tideUnder: -10, selectionMarks: 20 };
@@ -56,6 +57,7 @@ export function mountTide(o: TideOptions): TideHandle {
   root.setProperty('--tide-sink', SINK_CSS);
   root.setProperty('--tide-source', SOURCE_CSS);
   root.setProperty('--tide-neutral', NEUTRAL_CSS);
+  root.setProperty('--sel', `rgb(${SELECTION_COLOR.join(', ')})`);
 
   const sel = new StationSelection(index, store, clock, () => scene.requestRender(), o.root, {
     dir: o.dir,
@@ -73,26 +75,42 @@ export function mountTide(o: TideOptions): TideHandle {
       onClick: sel.handleClick,
       onHover: (info) => sel.handleHover(info, canvas),
     });
-    // A newly picked place off screen (Prospect Park from the opening view): bring it into view.
-    // Only on a new pick, not on every rebuild as hours load, so a pan away sticks.
+    // A newly picked place or station off screen, or hidden under the filter bar, the details
+    // panel or the HUD (Prospect Park from the opening view, a top destination clicked in the
+    // list): bring it into view. Only on a new pick, not on every rebuild as hours load, so a
+    // pan away sticks.
     let shown: string | null = null;
     sel.onChange(() => {
       const place = sel.place;
-      if (place?.id === shown) return;
-      shown = place?.id ?? null;
-      if (!place) return;
-      const [lng, lat] = placeCenter(place);
-      if (!o.map.getBounds().contains([lng, lat])) o.map.easeTo({ center: [lng, lat], duration: 900 });
+      const key = place ? `p:${place.id}` : sel.station >= 0 ? `s:${sel.station}` : null;
+      if (key === shown) return;
+      shown = key;
+      if (!key) return;
+      const st = o.stations[sel.station];
+      const lngLat: [number, number] = place ? placeCenter(place) : [st.lng, st.lat];
+      if (!inClearView(o.map, lngLat)) o.map.easeTo({ center: lngLat, duration: 900 });
     });
   }
 
   if (o.legend) {
     const key = document.createElement('span');
     key.className = 'tide-key';
-    key.title = 'Station dots: net bikes arriving (warm) vs leaving (cool) this 15 minutes';
-    key.innerHTML = '<em>filling</em><i></i><em>emptying</em>';
+    key.title = 'One dot per station. Bigger = more rides there this hour. Colour = net bikes arriving (filling) or leaving (emptying) this 15 minutes.';
+    key.innerHTML = '<b class="tk-dots" aria-hidden="true"><b></b><b></b></b><em class="tk-label">stations</em><em>filling</em><i></i><em>emptying</em>';
     o.legend.appendChild(key);
   }
 
   return { index, model, selection: sel };
+}
+
+/** Whether a point is on screen and clear of the filter bar, the details panel and the HUD. */
+function inClearView(map: MapLibreMap, lngLat: [number, number]): boolean {
+  const { x, y } = map.project(lngLat);
+  const canvas = map.getCanvas();
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const hud = document.querySelector<HTMLElement>('.hud')?.offsetHeight ?? 0;
+  const panel = document.querySelector<HTMLElement>('.station-panel:not([hidden])');
+  const right = panel && panel.offsetWidth < w * 0.6 ? panel.offsetWidth + 40 : 30;
+  return x > 30 && x < w - right && y > 130 && y < h - hud - 30;
 }

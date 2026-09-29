@@ -1,5 +1,5 @@
-// Frame rate across a whole simulated day at the default speed (720x: 24 h in
-// 2 min), bucketed by sim hour. Real data, production build by default.
+// Frame rate across a whole simulated day at 720x (24 h in 2 min), bucketed by
+// sim hour. Real data, production build by default.
 //
 //   npm run build && node scripts/fps-day.mjs                 # 1440x900 @2x
 //   node scripts/fps-day.mjs --mobile                         # 390x844 @3x, touch (half density)
@@ -19,7 +19,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  await page.goto(`${server.url}?place=all&t=00:00&paused${arg('query') ? `&${arg('query')}` : ''}`);
+  await page.goto(`${server.url}?place=all&t=00:00&paused&speed=720${arg('query') ? `&${arg('query')}` : ''}`);
   await page.waitForFunction(() => window.circ?.tide && window.circ.store.stats.loaded === 24, null, { timeout: 60_000 });
   await page.waitForTimeout(1500);
   const res = await page.evaluate(async () => {

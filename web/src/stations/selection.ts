@@ -1,15 +1,17 @@
 // Selection: a station (tide-dot click) or a place (a named set of docks, see
 // places.ts). Highlights the trips that leave it or arrive at it (all loaded
-// hours), dims everything else, rings its docks and the busiest docks at the
-// other end, and shows a details panel (rides by hour, top docks at the other
+// hours), dims everything else, marks it on the map in the selection colour
+// (a labelled halo and ring for a station; a labelled outline for a place,
+// with a dot on each of its docks),
+// numbers the busiest docks at the other end to match the list, and shows a details panel (rides by hour, top docks at the other
 // end). The direction (rides leaving or arriving) is kept across selections,
 // so switching place or clicking a station keeps it. Rebuilds as more hour
 // chunks are indexed, so an early selection fills in. Also owns the hover
 // tooltip. Clear with Esc or the filter bar's "All of New York City".
 
 import type { Layer, PickingInfo } from '@deck.gl/core';
-import { PathLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { TRAIL_LENGTH } from '../config';
+import { PathLayer, ScatterplotLayer, SolidPolygonLayer, TextLayer } from '@deck.gl/layers';
+import { SELECTION_COLOR, TRAIL_LENGTH } from '../config';
 import type { ChunkStore } from '../data/loader';
 import { ADDITIVE_BLEND } from '../layers/trips';
 import { CulledTripsLayer } from '../layers/culled-trips-layer';
@@ -24,6 +26,14 @@ export const DIMMED_TRIPS = 0.12;
 /** Opacity of the tide dots while something is selected (its rings stay full). */
 export const DIMMED_TIDE = 0.4;
 const TOP_N = 5;
+
+type LngLat = [number, number];
+/** Map marks draw over everything, regardless of depth. */
+const ON_TOP = { depthWriteEnabled: false, depthCompare: 'always' } as const;
+const INK: [number, number, number, number] = [6, 7, 10, 215];
+const WARM: [number, number, number, number] = [255, 244, 230, 235];
+const SEL = (alpha: number): [number, number, number, number] => [...SELECTION_COLOR, alpha];
+const LABEL_FONT = "ui-sans-serif, -apple-system, 'Inter', 'Helvetica Neue', Arial, sans-serif";
 
 /** 'out': rides that start at the selection; 'in': rides that end there. */
 export type Dir = 'out' | 'in';
@@ -47,8 +57,13 @@ interface Selection {
   /** Binary path data of the highlighted trips (null if none). */
   paths: object | null;
   trips: object | null;
-  marks: object;
-  outline: [number, number][] | null;
+  /** Positions of the selection's docks. */
+  own: LngLat[];
+  /** The top docks at the other end, ranked from 1 (same order as `top`). */
+  ranked: { position: LngLat; rank: number }[];
+  /** The selection's name on the map: over the station, or at the top of the place's outline. */
+  label: { position: LngLat; text: string };
+  outline: LngLat[] | null;
 }
 
 export class StationSelection {
@@ -175,11 +190,22 @@ export class StationSelection {
       this.hovered = s;
       const st = this.index.stations[s];
       const bin = this.clock.bin15;
-      this.tip.innerHTML = `<div class="st-box"><b>${esc(st.name)}</b><div class="st-flow">${flowHtml(st.tide[bin] ?? 0)} <em>${binLabel(bin)}</em></div></div>`;
+      this.tip.innerHTML = `<div class="st-box"><b>${esc(st.name)}</b>${this.rankHtml(s)}<div class="st-flow">${flowHtml(st.tide[bin] ?? 0)} <em>${binLabel(bin)}</em></div></div>`;
     }
     this.tip.hidden = false;
     this.tip.style.transform = `translate(${Math.round(info.x)}px, ${Math.round(info.y)}px)`;
   };
+
+  /** "Top destination #2 · 15 rides" when `s` is one of the numbered docks, or "Selected". */
+  private rankHtml(s: number): string {
+    const sel = this.sel;
+    if (!sel) return '';
+    if (sel.members.includes(s)) return `<div class="st-rank">${selBadge(sel.target.kind)}Selected${sel.target.kind === 'place' ? ` · ${esc(sel.target.place.name)}` : ''}</div>`;
+    const i = sel.top.findIndex((d) => d.station === s);
+    if (i < 0) return '';
+    const what = sel.dir === 'out' ? 'Top destination' : 'Top origin';
+    return `<div class="st-rank"><span class="rank">${i + 1}</span>${what} · ${sel.top[i].count.toLocaleString('en-US')} rides</div>`;
+  }
 
   /** Select a station, keeping the current direction. */
   select(s: number, dir: Dir = this.dir): void {
@@ -245,37 +271,152 @@ export class StationSelection {
     ];
   }
 
-  /** The place outline and rings on the selection's docks and the top docks at the other end. Draw above the tide dots. */
+  /**
+   * The selection on the map, above the tide dots, in the selection colour: a
+   * place's outline (dark casing, faint fill) and a dot on each of its docks,
+   * or a halo and ring on a station; the selection's name (beside the station, above the place); and
+   * numbered badges on the top docks at the other end (matching the details
+   * list), drawn last so a label never hides a number.
+   */
   markLayers(): Layer[] {
     const sel = this.sel;
     if (!sel) return [];
+    const single = sel.target.kind === 'station';
     const layers: Layer[] = [];
     if (sel.outline) {
       layers.push(
-        new PathLayer({
-          id: 'sel-outline',
+        new SolidPolygonLayer({
+          id: 'sel-fill',
           data: [sel.outline],
-          getPath: (d: [number, number][]) => d,
-          getColor: [255, 244, 230, 90],
-          widthUnits: 'pixels',
-          getWidth: 1.2,
-          jointRounded: true,
+          getPolygon: (d: LngLat[]) => d,
+          getFillColor: SEL(18),
           pickable: false,
-          parameters: { depthWriteEnabled: false, depthCompare: 'always' },
+          parameters: ON_TOP,
+        }),
+        ...[
+          { id: 'sel-outline-casing', color: INK, width: 5 },
+          { id: 'sel-outline', color: SEL(235), width: 2 },
+        ].map(
+          (o) =>
+            new PathLayer({
+              id: o.id,
+              data: [sel.outline],
+              getPath: (d: LngLat[]) => d,
+              getColor: o.color,
+              widthUnits: 'pixels',
+              getWidth: o.width,
+              jointRounded: true,
+              pickable: false,
+              parameters: ON_TOP,
+            }),
+        ),
+      );
+    }
+    if (single) {
+      layers.push(
+        new ScatterplotLayer({
+          id: 'sel-halo',
+          data: sel.own,
+          getPosition: (d: LngLat) => d,
+          radiusUnits: 'pixels',
+          getRadius: 24,
+          getFillColor: SEL(64),
+          pickable: false,
+          parameters: ON_TOP,
+        }),
+      );
+    }
+    if (single) {
+      layers.push(
+        ...[
+          { id: 'sel-rings-casing', color: INK, width: 6 },
+          { id: 'sel-rings', color: SEL(255), width: 3 },
+        ].map(
+          (o) =>
+            new ScatterplotLayer({
+              id: o.id,
+              data: sel.own,
+              getPosition: (d: LngLat) => d,
+              radiusUnits: 'pixels',
+              getRadius: 11,
+              stroked: true,
+              filled: false,
+              lineWidthUnits: 'pixels',
+              getLineWidth: o.width,
+              getLineColor: o.color,
+              pickable: false,
+              parameters: ON_TOP,
+            }),
+        ),
+      );
+    } else {
+      layers.push(
+        new ScatterplotLayer({
+          id: 'sel-docks',
+          data: sel.own,
+          getPosition: (d: LngLat) => d,
+          radiusUnits: 'pixels',
+          getRadius: 6,
+          getFillColor: SEL(255),
+          stroked: true,
+          lineWidthUnits: 'pixels',
+          getLineWidth: 2,
+          getLineColor: INK,
+          pickable: false,
+          parameters: ON_TOP,
         }),
       );
     }
     layers.push(
+      new TextLayer({
+        id: 'sel-label',
+        data: [sel.label],
+        getPosition: (d: Selection['label']) => d.position,
+        getText: (d: Selection['label']) => d.text,
+        getColor: [255, 255, 255, 255],
+        getSize: 13,
+        getPixelOffset: single ? [20, 0] : [0, -8],
+        fontFamily: LABEL_FONT,
+        fontWeight: 600,
+        characterSet: 'auto',
+        getTextAnchor: single ? 'start' : 'middle',
+        getAlignmentBaseline: single ? 'center' : 'bottom',
+        background: true,
+        getBackgroundColor: [10, 12, 16, 225],
+        getBorderColor: SEL(210),
+        getBorderWidth: 1,
+        backgroundPadding: [8, 4],
+        backgroundBorderRadius: 6,
+        pickable: false,
+        parameters: ON_TOP,
+      }),
       new ScatterplotLayer({
-        id: 'sel-marks',
-        data: sel.marks as never,
+        id: 'sel-top',
+        data: sel.ranked,
+        getPosition: (d: Selection['ranked'][number]) => d.position,
         radiusUnits: 'pixels',
+        getRadius: 8.5,
+        getFillColor: INK,
         stroked: true,
-        filled: false,
         lineWidthUnits: 'pixels',
         getLineWidth: 1.5,
+        getLineColor: WARM,
         pickable: false,
-        parameters: { depthWriteEnabled: false, depthCompare: 'always' },
+        parameters: ON_TOP,
+      }),
+      new TextLayer({
+        id: 'sel-top-rank',
+        data: sel.ranked,
+        getPosition: (d: Selection['ranked'][number]) => d.position,
+        getText: (d: Selection['ranked'][number]) => String(d.rank),
+        getColor: WARM,
+        getSize: 11,
+        fontFamily: LABEL_FONT,
+        fontWeight: 700,
+        getTextAnchor: 'middle',
+        getAlignmentBaseline: 'center',
+        pickable: false,
+        parameters: ON_TOP,
       }),
     );
     return layers;
@@ -372,28 +513,12 @@ export class StationSelection {
       };
     }
 
-    // Rings: the selection's docks (a big ring for a station, small ones for a
-    // place's many docks), then the top docks at the other end.
-    const single = target.kind === 'station';
-    const ringStations = [...members, ...top.map((d) => d.station)];
-    const pos = new Float32Array(ringStations.length * 2);
-    const radius = new Float32Array(ringStations.length);
-    const ring = new Uint8Array(ringStations.length * 4);
-    ringStations.forEach((st, k) => {
-      const own = k < members.length;
-      pos[2 * k] = index.positions[2 * st];
-      pos[2 * k + 1] = index.positions[2 * st + 1];
-      radius[k] = own ? (single ? 11 : 6) : 7;
-      ring.set(own ? [255, 255, 255, 240] : [255, 244, 230, 170], 4 * k);
-    });
-    const marks = {
-      length: ringStations.length,
-      attributes: {
-        getPosition: { value: pos, size: 2 },
-        getRadius: { value: radius, size: 1 },
-        getLineColor: { value: ring, size: 4, normalized: true },
-      },
-    };
+    const at = (st: number): LngLat => [index.positions[2 * st], index.positions[2 * st + 1]];
+    const outline = target.kind === 'place' ? placeOutline(target.place) : null;
+    // A place's label sits on the northernmost point of its outline, clear of its docks.
+    const label = outline
+      ? { position: outline.reduce((a, p) => (p[1] > a[1] ? p : a)), text: target.kind === 'place' ? target.place.name : '' }
+      : { position: at(members[0]), text: index.stations[members[0]].name };
 
     return {
       target,
@@ -407,8 +532,10 @@ export class StationSelection {
       top,
       paths,
       trips,
-      marks,
-      outline: target.kind === 'place' ? placeOutline(target.place) : null,
+      own: members.map(at),
+      ranked: top.map((d, i) => ({ position: at(d.station), rank: i + 1 })),
+      label,
+      outline,
     };
   }
 
@@ -424,8 +551,8 @@ export class StationSelection {
     const dests = sel.top.length
       ? sel.top
           .map(
-            (d) => `<li data-station="${d.station}" style="--w:${((100 * d.count) / max).toFixed(1)}%">
-              <span class="sp-dn">${esc(stations[d.station].name)}</span>
+            (d, i) => `<li data-station="${d.station}" style="--w:${((100 * d.count) / max).toFixed(1)}%">
+              <span class="rank">${i + 1}</span><span class="sp-dn">${esc(stations[d.station].name)}</span>
               <span class="sp-dc">${n(d.count)}</span></li>`,
           )
           .join('')
@@ -443,12 +570,12 @@ export class StationSelection {
       <button class="sp-close" type="button" aria-label="Hide details">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       <div class="sp-kicker">${place ? 'Place' : 'Station'}</div>
-      <h2 class="sp-name">${esc(name)}</h2>
+      <h2 class="sp-name">${selBadge(sel.target.kind)}${esc(name)}</h2>
       ${place ? `<div class="sp-blurb">${esc(place.blurb)} · ${sel.members.length} docks</div>` : '<div class="sp-flow"></div>'}
       <div class="sp-total"><b>${n(out ? sel.outbound : sel.inbound)}</b> rides ${out ? 'leaving' : 'arriving'}</div>
       <h3>${out ? 'Leaving' : 'Arriving'} by hour${sel.inbound + sel.outbound ? ` <span class="sp-peak">peak ${formatClock(peak * 3600)}</span>` : ''}</h3>
       <div class="sp-hours" style="--now:${this.clock.hour}">${bars}</div>
-      <h3>${out ? 'Top destinations' : 'Top origins'}</h3>
+      <h3>${out ? 'Top destinations' : 'Top origins'}${sel.top.length ? ' <span class="sp-peak sp-hint">numbered on the map</span>' : ''}</h3>
       <ol class="sp-dests">${dests}</ol>
       ${place && sel.internal ? `<div class="sp-note">${n(sel.internal)} of these rides ${out ? 'end' : 'start'} at ${esc(inside)} too.</div>` : ''}
       ${hours < 24 ? `<div class="sp-note">Counting… ${hours}/24 hours loaded</div>` : ''}`;
@@ -467,6 +594,11 @@ export class StationSelection {
     const raw = this.index.stations[this.sel.target.station].tide[bin] ?? 0;
     el.innerHTML = `${flowHtml(raw)} <em>${binLabel(bin)}</em>`;
   }
+}
+
+/** The selection's mark as on the map: a place's dock dot, or the station's ring. */
+function selBadge(kind: Target['kind']): string {
+  return `<span class="sel-badge${kind === 'station' ? ' ring' : ''}"></span>`;
 }
 
 /** "+12 arriving / 15 min" with the tide colour class. */

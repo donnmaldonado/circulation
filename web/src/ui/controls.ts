@@ -26,7 +26,7 @@ export function mountControls(parent: HTMLElement, clock: Clock, date: string): 
     <div class="hud-key" aria-hidden="true">
       <span><i style="--c:${rgb(COLORS.ebike)}"></i>e-bike</span>
       <span><i style="--c:${rgb(COLORS.classic)}"></i>classic</span>
-      <span class="hk-tide"><b class="dot sink"></b>filling <b class="dot source"></b>emptying</span>
+      <span class="hk-tide">stations: <b class="dot sink"></b>filling <b class="dot source"></b>emptying</span>
     </div>
     <div class="hud-slot" data-slot="scrubber"></div>
     <div class="hud-row">

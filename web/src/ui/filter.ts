@@ -19,6 +19,7 @@ export function mountFilter(
 ): void {
   slot.innerHTML = `
     <div class="fb-place">
+      <span class="sel-badge" aria-hidden="true"></span>
       <select aria-label="Show rides for">
         <option value="${ALL}">All of New York City</option>
         <optgroup label="Places">${PLACES.map((p) => `<option value="place:${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>
@@ -31,6 +32,8 @@ export function mountFilter(
     <button type="button" class="fb-details" aria-controls="details" aria-expanded="false">Details</button>`;
 
   const select = slot.querySelector('select')!;
+  const place = slot.querySelector<HTMLElement>('.fb-place')!;
+  const badge = place.querySelector<HTMLElement>('.sel-badge')!;
   const dirBtns = [...slot.querySelectorAll<HTMLButtonElement>('[data-dir]')];
   const detailsBtn = slot.querySelector<HTMLButtonElement>('.fb-details')!;
   // The clicked station gets its own group while it is selected.
@@ -62,6 +65,9 @@ export function mountFilter(
       if (!stationGroup.isConnected) select.appendChild(stationGroup);
     } else stationGroup.remove();
     select.value = sel.place ? `place:${sel.place.id}` : st >= 0 ? `station:${st}` : ALL;
+    // The selection's mark from the map (a dock dot, or the station ring) ties the picker to it.
+    place.classList.toggle('marked', sel.active);
+    badge.classList.toggle('ring', st >= 0);
 
     const { inbound, outbound } = sel.counts;
     for (const b of dirBtns) {
