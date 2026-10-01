@@ -20,7 +20,8 @@ IMAGE="${OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend:v6.0.0}"
 CONTAINER="${OSRM_CONTAINER:-circulation-osrm}"
 PORT="${OSRM_PORT:-5055}"
 BBOX="-74.27,40.48,-73.68,40.93"   # all five boroughs
-STATE_URL="https://download.geofabrik.de/north-america/us/new-york-latest.osm.pbf"
+STATE_DIR_URL="https://download.geofabrik.de/north-america/us"
+STATE_URL="$STATE_DIR_URL/new-york-latest.osm.pbf"
 STATE_PBF="$OSM_DIR/new-york-latest.osm.pbf"
 NYC_PBF="$OSM_DIR/nyc.osm.pbf"
 BUILD="$OSM_DIR/build"              # OSRM files live here: build/nyc.osrm*
@@ -34,6 +35,15 @@ fi
 
 mkdir -p "$OSM_DIR" "$BUILD"
 log() { echo "[b_osrm $(date +%H:%M:%S)] $*"; }
+
+# Geofabrik's -latest aliases can vanish (on 2026-10-01 every one of them was gone
+# and the URL redirected in a loop), so the fallback is the newest dated extract in
+# the directory listing: new-york-YYMMDD.osm.pbf, which sorts by date.
+newest_dated_url() {
+  local name
+  name="$(curl -fsS "$STATE_DIR_URL/" | grep -oE 'new-york-[0-9]{6}\.osm\.pbf' | sort -u | tail -1 || true)"
+  [[ -n "$name" ]] && echo "$STATE_DIR_URL/$name"
+}
 
 start_container() {
   if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
@@ -62,7 +72,11 @@ esac
 if [[ ! -s "$NYC_PBF" ]]; then
   if [[ ! -s "$STATE_PBF" ]]; then
     log "downloading $STATE_URL"
-    curl -fL --retry 3 -o "$STATE_PBF.part" "$STATE_URL"
+    if ! curl -fL --retry 3 --max-redirs 5 -o "$STATE_PBF.part" "$STATE_URL"; then
+      url="$(newest_dated_url)" || { log "no dated extract listed at $STATE_DIR_URL/"; exit 1; }
+      log "falling back to $url"
+      curl -fL --retry 3 -o "$STATE_PBF.part" "$url"
+    fi
     mv "$STATE_PBF.part" "$STATE_PBF"
   fi
   log "clipping to bbox $BBOX"
