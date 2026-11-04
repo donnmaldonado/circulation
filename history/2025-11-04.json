@@ -1,0 +1,28 @@
+{
+  "date": "2025-11-04",
+  "deployed_at": "2026-11-04T13:05:33Z",
+  "page_url": "https://donnmaldonado.github.io/circulation/",
+  "run_url": "https://github.com/donnmaldonado/circulation/actions/runs/41834348023",
+  "built_from": "93aa41a1ece9146575d9f181688a3dbd72cce34c",
+  "day": {
+    "date": "2025-11-04",
+    "weekday": "Tuesday",
+    "raw_trips": 151965,
+    "raw_trips_note": "trips with started_at on this date (NYC local), before cleaning",
+    "clean_trips": 149193,
+    "dropped": {
+      "short": 0,
+      "long": 143,
+      "null_station": 490,
+      "round_trip": 2139
+    },
+    "dropped_note": "each trip counted once, under the first rule it fails in the order listed",
+    "source_months": [
+      "2025-11"
+    ],
+    "source_months_note": "Citi Bike monthly files read (split by end time); the next month is included only when the day is the last of its month",
+    "station_coords_month": "2025-11",
+    "unique_pairs": 98583,
+    "stations": 2164
+  }
+}
